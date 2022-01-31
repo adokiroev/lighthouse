@@ -1,19 +1,24 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
+ * @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
 'use strict';
 
 const ImageAspectRatioAudit = require('../../audits/image-aspect-ratio.js');
-const assert = require('assert');
+const assert = require('assert').strict;
 
 /* eslint-env jest */
 
-function generateImage(clientSize, naturalSize, props, src = 'https://google.com/logo.png') {
-  const image = {src, mimeType: 'image/png'};
-  Object.assign(image, clientSize, naturalSize, props);
-  return image;
+function generateImage(clientSize, naturalDimensions, props, src = 'https://google.com/logo.png') {
+  return {
+    src,
+    computedStyles: {objectFit: 'fill'},
+    naturalDimensions,
+    node: {devtoolsNodePath: '1,HTML,1,IMG'},
+    ...clientSize,
+    ...props,
+  };
 }
 
 describe('Images: aspect-ratio audit', () => {
@@ -24,18 +29,13 @@ describe('Images: aspect-ratio audit', () => {
         ImageElements: [
           generateImage(
             {displayedWidth: data.clientSize[0], displayedHeight: data.clientSize[1]},
-            {naturalWidth: data.naturalSize[0], naturalHeight: data.naturalSize[1]},
+            {width: data.naturalSize[0], height: data.naturalSize[1]},
             data.props
           ),
         ],
       });
 
       assert.strictEqual(result.score, data.score, 'score does not match');
-      if (data.warning) {
-        assert.strictEqual(result.warnings[0], data.warning);
-      } else {
-        assert.ok(!result.warnings || result.warnings.length === 0, 'should not have warnings');
-      }
     });
   }
 
@@ -54,7 +54,6 @@ describe('Images: aspect-ratio audit', () => {
     naturalSize: [200, 200],
     props: {
       isCss: false,
-      usesObjectFit: false,
     },
   });
 
@@ -64,7 +63,6 @@ describe('Images: aspect-ratio audit', () => {
     naturalSize: [200, 200],
     props: {
       isCss: true,
-      usesObjectFit: false,
     },
   });
 
@@ -74,7 +72,6 @@ describe('Images: aspect-ratio audit', () => {
     naturalSize: [200, 200],
     props: {
       isCss: false,
-      usesObjectFit: false,
     },
   });
 
@@ -84,7 +81,7 @@ describe('Images: aspect-ratio audit', () => {
     naturalSize: [800, 500],
     props: {
       isCss: false,
-      usesObjectFit: true,
+      computedStyles: {objectFit: 'cover'},
     },
   });
 
@@ -94,17 +91,14 @@ describe('Images: aspect-ratio audit', () => {
     naturalSize: [800, 500],
     props: {
       isCss: false,
-      usesObjectFit: false,
     },
   });
-
   testImage('is smaller than natural aspect ratio', {
     score: 0,
     clientSize: [200, 200],
     naturalSize: [400, 300],
     props: {
       isCss: false,
-      usesObjectFit: false,
     },
   });
 
@@ -114,7 +108,6 @@ describe('Images: aspect-ratio audit', () => {
     naturalSize: [800, 69],
     props: {
       isCss: false,
-      usesObjectFit: false,
     },
   });
 
@@ -124,7 +117,6 @@ describe('Images: aspect-ratio audit', () => {
     naturalSize: [300, 300],
     props: {
       isCss: false,
-      usesObjectFit: false,
     },
   });
 
@@ -134,7 +126,6 @@ describe('Images: aspect-ratio audit', () => {
     naturalSize: [100, 100],
     props: {
       isCss: false,
-      usesObjectFit: false,
     },
   });
 
@@ -144,7 +135,6 @@ describe('Images: aspect-ratio audit', () => {
     naturalSize: [1, 1],
     props: {
       isCss: false,
-      usesObjectFit: false,
     },
   });
 
@@ -153,17 +143,17 @@ describe('Images: aspect-ratio audit', () => {
       ImageElements: [
         generateImage(
           {width: 150, height: 150},
-          {},
+          {width: 100, height: 200},
           {
-            mimeType: 'image/svg+xml',
             isCss: false,
-            usesObjectFit: false,
-          }
+            displayedWidth: 150,
+            displayedHeight: 150,
+          },
+          'https://google.com/logo.svg'
         ),
       ],
     });
 
     assert.strictEqual(result.score, 1, 'score does not match');
-    assert.equal(result.warnings.length, 0, 'should not have warnings');
   });
 });

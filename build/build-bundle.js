@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
+ * @license Copyright 2018 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -12,136 +12,195 @@
 
 const fs = require('fs');
 const path = require('path');
+const rollup = require('rollup');
+const rollupPlugins = require('./rollup-plugins.js');
+const Runner = require('../lighthouse-core/runner.js');
+const {LH_ROOT} = require('../root.js');
 
-const LighthouseRunner = require('../lighthouse-core/runner.js');
-const babel = require('babel-core');
-const browserify = require('browserify');
-const makeDir = require('make-dir');
-const pkg = require('../package.json');
-
-const VERSION = pkg.version;
 const COMMIT_HASH = require('child_process')
   .execSync('git rev-parse HEAD')
   .toString().trim();
 
-const audits = LighthouseRunner.getAuditList()
-    .map(f => './lighthouse-core/audits/' + f.replace(/\.js$/, ''));
-
-const gatherers = LighthouseRunner.getGathererList()
-    .map(f => './lighthouse-core/gather/gatherers/' + f.replace(/\.js$/, ''));
-
-const locales = fs.readdirSync(__dirname + '/../lighthouse-core/lib/i18n/locales/')
-    .map(f => require.resolve(`../lighthouse-core/lib/i18n/locales/${f}`));
+// HACK: manually include the lighthouse-plugin-publisher-ads audits.
+/** @type {Array<string>} */
+// @ts-expect-error
+const pubAdsAudits = require('lighthouse-plugin-publisher-ads/plugin.js').audits.map(a => a.path);
 
 /** @param {string} file */
-const isDevtools = file => path.basename(file).includes('devtools');
+const isDevtools = file =>
+  path.basename(file).includes('devtools') || path.basename(file).endsWith('dt-bundle.js');
 /** @param {string} file */
-const isExtension = file => path.basename(file).includes('extension');
+const isLightrider = file => path.basename(file).includes('lightrider');
 
-const BANNER = `// lighthouse, browserified. ${VERSION} (${COMMIT_HASH})\n`;
-const DEBUG = false; // true for sourcemaps
+// Set to true for source maps.
+const DEBUG = false;
+
+const today = (() => {
+  const date = new Date();
+  const year = new Intl.DateTimeFormat('en', {year: 'numeric'}).format(date);
+  const month = new Intl.DateTimeFormat('en', {month: 'short'}).format(date);
+  const day = new Intl.DateTimeFormat('en', {day: '2-digit'}).format(date);
+  return `${month} ${day} ${year}`;
+})();
+const pkg = JSON.parse(fs.readFileSync(LH_ROOT + '/package.json', 'utf-8'));
+const banner = `
+/**
+ * Lighthouse v${pkg.version} ${COMMIT_HASH} (${today})
+ *
+ * ${pkg.description}
+ *
+ * @homepage ${pkg.homepage}
+ * @author   ${pkg.author}
+ * @license  ${pkg.license}
+ */
+`.trim();
 
 /**
- * Browserify starting at the file at entryPath. Contains entry-point-specific
- * ignores (e.g. for DevTools or the extension) to trim the bundle depending on
- * the eventual use case.
+ * Bundle starting at entryPath, writing the minified result to distPath.
  * @param {string} entryPath
  * @param {string} distPath
+ * @param {{minify: boolean}=} opts
  * @return {Promise<void>}
  */
-async function browserifyFile(entryPath, distPath) {
-  let bundle = browserify(entryPath, {debug: DEBUG});
+async function build(entryPath, distPath, opts = {minify: true}) {
+  if (fs.existsSync(LH_ROOT + '/lighthouse-logger/node_modules')) {
+    throw new Error('delete `lighthouse-logger/node_modules` because it messes up rollup bundle');
+  }
 
-  bundle
-    // Transform the fs.readFile etc into inline strings.
-    .transform('brfs', {global: true, parserOpts: {ecmaVersion: 10}})
-    // Strip everything out of package.json includes except for the version.
-    .transform('package-json-versionify');
+  // List of paths (absolute / relative to config-helpers.js) to include
+  // in bundle and make accessible via config-helpers.js `requireWrapper`.
+  const dynamicModulePaths = [
+    ...Runner.getGathererList().map(gatherer => `../gather/gatherers/${gatherer}`),
+    ...Runner.getAuditList().map(gatherer => `../audits/${gatherer}`),
+  ];
 
-  // scripts will need some additional transforms, ignores and requires…
-  bundle.ignore('source-map')
-    .ignore('debug/node')
-    .ignore('intl')
-    .ignore('raven')
-    .ignore('mkdirp')
-    .ignore('rimraf')
-    .ignore('pako/lib/zlib/inflate.js');
+  // Include lighthouse-plugin-publisher-ads.
+  if (isDevtools(entryPath) || isLightrider(entryPath)) {
+    dynamicModulePaths.push('lighthouse-plugin-publisher-ads');
+    pubAdsAudits.forEach(pubAdAudit => {
+      dynamicModulePaths.push(pubAdAudit);
+    });
+  }
 
-  // Don't include the desktop protocol connection.
-  bundle.ignore(require.resolve('../lighthouse-core/gather/connections/cri.js'));
+  const bundledMapEntriesCode = dynamicModulePaths.map(modulePath => {
+    const pathNoExt = modulePath.replace('.js', '');
+    return `['${pathNoExt}', require('${modulePath}')]`;
+  }).join(',\n');
 
-  // Dont include the stringified report in DevTools.
+  /** @type {Record<string, string>} */
+  const shimsObj = {};
+
+  const modulesToIgnore = [
+    'intl-pluralrules',
+    'intl',
+    'pako/lib/zlib/inflate.js',
+    'raven',
+    'source-map',
+    'ws',
+    require.resolve('../lighthouse-core/gather/connections/cri.js'),
+  ];
+
+  // Don't include the stringified report in DevTools - see devtools-report-assets.js
+  // Don't include in Lightrider - HTML generation isn't supported, so report assets aren't needed.
+  if (isDevtools(entryPath) || isLightrider(entryPath)) {
+    modulesToIgnore.push(require.resolve('../report/generator/report-assets.js'));
+  }
+
+  // Don't include locales in DevTools.
   if (isDevtools(entryPath)) {
-    bundle.ignore(require.resolve('../lighthouse-core/report/html/html-report-assets.js'));
+    shimsObj['./locales.js'] = 'export default {}';
   }
 
-  // Don't include locales in DevTools or the extension for now.
-  if (isDevtools(entryPath) || isExtension(entryPath)) {
-    // @ts-ignore bundle.ignore does accept an array of strings.
-    bundle.ignore(locales);
+  for (const modulePath of modulesToIgnore) {
+    shimsObj[modulePath] = 'export default {}';
   }
 
-  // Expose the audits, gatherers, and computed artifacts so they can be dynamically loaded.
-  const corePath = './lighthouse-core/';
-  const driverPath = `${corePath}gather/`;
-  audits.forEach(audit => {
-    bundle = bundle.require(audit, {expose: audit.replace(corePath, '../')});
-  });
-  gatherers.forEach(gatherer => {
-    bundle = bundle.require(gatherer, {expose: gatherer.replace(driverPath, '../gather/')});
-  });
+  shimsObj[require.resolve('../package.json')] =
+    `export const version = ${JSON.stringify(require('../package.json').version)}`;
 
-  // browerify's url shim doesn't work with .URL in node_modules,
-  // and within robots-parser, it does `var URL = require('url').URL`, so we expose our own.
-  // @see https://github.com/GoogleChrome/lighthouse/issues/5273
-  const pathToURLShim = require.resolve('../lighthouse-core/lib/url-shim.js');
-  bundle = bundle.require(pathToURLShim, {expose: 'url'});
-
-  const bundleStream = bundle.bundle();
-
-  // Make sure path exists.
-  await makeDir(path.dirname(distPath));
-  return new Promise((resolve, reject) => {
-    const writeStream = fs.createWriteStream(distPath);
-    writeStream.on('finish', resolve);
-    writeStream.on('error', reject);
-
-    bundleStream.pipe(writeStream);
-  });
-}
-
-/**
- * Minimally minify a javascript file, in place.
- * @param {string} filePath
- */
-function minifyScript(filePath) {
-  const opts = {
-    compact: true, // Do not include superfluous whitespace characters and line terminators.
-    retainLines: true, // Keep things on the same line (looks wonky but helps with stacktraces)
-    comments: false, // Don't output comments
-    shouldPrintComment: () => false, // Don't include @license or @preserve comments either
+  const bundle = await rollup.rollup({
+    input: entryPath,
+    context: 'globalThis',
     plugins: [
-      'syntax-object-rest-spread',
-      'syntax-async-generators',
+      rollupPlugins.replace({
+        delimiters: ['', ''],
+        values: {
+          '/* BUILD_REPLACE_BUNDLED_MODULES */': `[\n${bundledMapEntriesCode},\n]`,
+          '__dirname': (id) => `'${path.relative(LH_ROOT, path.dirname(id))}'`,
+          '__filename': (id) => `'${path.relative(LH_ROOT, id)}'`,
+          // This package exports to default in a way that causes Rollup to get confused,
+          // resulting in MessageFormat being undefined.
+          'require(\'intl-messageformat\').default': 'require(\'intl-messageformat\')',
+          // Rollup doesn't replace this, so let's manually change it to false.
+          'require.main === module': 'false',
+          // TODO: Use globalThis directly.
+          'global.isLightrider': 'globalThis.isLightrider',
+          'global.isDevtools': 'globalThis.isDevtools',
+        },
+      }),
+      rollupPlugins.alias({
+        entries: {
+          'debug': require.resolve('debug/src/browser.js'),
+          'lighthouse-logger': require.resolve('../lighthouse-logger/index.js'),
+        },
+      }),
+      rollupPlugins.shim({
+        ...shimsObj,
+        // Allows for plugins to import lighthouse.
+        'lighthouse': `
+          import Audit from '${require.resolve('../lighthouse-core/audits/audit.js')}';
+          export {Audit};
+        `,
+        // Most node 'url' polyfills don't include the WHATWG `URL` property, but
+        // that's all that's needed, so make a mini-polyfill.
+        // @see https://github.com/GoogleChrome/lighthouse/issues/5273
+        // TODO: remove when not needed for pubads (https://github.com/googleads/publisher-ads-lighthouse-plugin/pull/325)
+        'url': 'export const URL = globalThis.URL;',
+      }),
+      rollupPlugins.json(),
+      rollupPlugins.inlineFs({verbose: false}),
+      rollupPlugins.commonjs({
+        // https://github.com/rollup/plugins/issues/922
+        ignoreGlobal: true,
+      }),
+      rollupPlugins.nodePolyfills(),
+      rollupPlugins.nodeResolve({preferBuiltins: true}),
+      // Rollup sees the usages of these functions in page functions (ex: see AnchorElements)
+      // and treats them as globals. Because the names are "taken" by the global, Rollup renames
+      // the actual functions (getNodeDetails$1). The page functions expect a certain name, so
+      // here we undo what Rollup did.
+      rollupPlugins.postprocess([
+        [/getBoundingClientRect\$1/, 'getBoundingClientRect'],
+        [/getElementsInDocument\$1/, 'getElementsInDocument'],
+        [/getNodeDetails\$1/, 'getNodeDetails'],
+        [/getRectCenterPoint\$1/, 'getRectCenterPoint'],
+        [/isPositionFixed\$1/, 'isPositionFixed'],
+      ]),
+      opts.minify && rollupPlugins.terser({
+        ecma: 2019,
+        output: {
+          comments: (node, comment) => {
+            const text = comment.value;
+            if (text.includes('The Lighthouse Authors') && comment.line > 1) return false;
+            return /@ts-nocheck - Prevent tsc|@preserve|@license|@cc_on|^!/i.test(text);
+          },
+          max_line_len: 1000,
+        },
+        // The config relies on class names for gatherers.
+        keep_classnames: true,
+        // Runtime.evaluate errors if function names are elided.
+        keep_fnames: true,
+      }),
     ],
-    // sourceMaps: 'both'
-  };
+  });
 
-  const minified = BANNER + babel.transformFileSync(filePath, opts).code;
-  fs.writeFileSync(filePath, minified);
-}
-
-/**
- * Browserify starting at entryPath, writing the minified result to distPath.
- * @param {string} entryPath
- * @param {string} distPath
- * @return {Promise<void>}
- */
-async function build(entryPath, distPath) {
-  await browserifyFile(entryPath, distPath);
-  if (!DEBUG) {
-    minifyScript(distPath);
-  }
+  await bundle.write({
+    file: distPath,
+    banner,
+    format: 'iife',
+    sourcemap: DEBUG,
+  });
+  await bundle.close();
 }
 
 /**
@@ -151,12 +210,15 @@ async function cli(argv) {
   // Take paths relative to cwd and build.
   const [entryPath, distPath] = argv.slice(2)
     .map(filePath => path.resolve(process.cwd(), filePath));
-  build(entryPath, distPath);
+  await build(entryPath, distPath);
 }
 
-// @ts-ignore Test if called from the CLI or as a module.
+// Test if called from the CLI or as a module.
 if (require.main === module) {
-  cli(process.argv);
+  cli(process.argv).catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
 } else {
   module.exports = {
     /** The commit hash for the current HEAD. */

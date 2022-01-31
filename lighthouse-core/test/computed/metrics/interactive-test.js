@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
+ * @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -7,47 +7,62 @@
 
 const Interactive = require('../../../computed/metrics/interactive.js');
 
-const assert = require('assert');
+const assert = require('assert').strict;
 
 const trace = require('../../fixtures/traces/progressive-app-m60.json');
 const devtoolsLog = require('../../fixtures/traces/progressive-app-m60.devtools.log.json');
 
-function generateNetworkRecords(records, navStart) {
-  const navStartInMs = navStart / 1000;
+function generateNetworkRecords(records, timeOrigin) {
+  const timeOriginInMs = timeOrigin / 1000;
   return records.map(item => {
     return {
+      protocol: 'http',
       failed: item.failed || false,
       statusCode: item.statusCode || 200,
       requestMethod: item.requestMethod || 'GET',
       finished: typeof item.finished === 'undefined' ? true : item.finished,
-      startTime: (item.start + navStartInMs) / 1000,
-      endTime: item.end === -1 ? -1 : (item.end + navStartInMs) / 1000,
+      startTime: (item.start + timeOriginInMs) / 1000,
+      endTime: item.end === -1 ? -1 : (item.end + timeOriginInMs) / 1000,
     };
   });
 }
 
 /* eslint-env jest */
 describe('Metrics: TTI', () => {
+  const gatherContext = {gatherMode: 'navigation'};
+
   it('should compute a simulated value', async () => {
     const settings = {throttlingMethod: 'simulate'};
     const context = {settings, computedCache: new Map()};
-    const result = await Interactive.request({trace, devtoolsLog, settings}, context);
+    const result = await Interactive.request({trace, devtoolsLog, gatherContext, settings},
+      context);
 
     expect({
       timing: Math.round(result.timing),
       optimistic: Math.round(result.optimisticEstimate.timeInMs),
       pessimistic: Math.round(result.pessimisticEstimate.timeInMs),
     }).toMatchSnapshot();
-    assert.equal(result.optimisticEstimate.nodeTimings.size, 19);
-    assert.equal(result.pessimisticEstimate.nodeTimings.size, 79);
+    assert.equal(result.optimisticEstimate.nodeTimings.size, 20);
+    assert.equal(result.pessimisticEstimate.nodeTimings.size, 80);
     assert.ok(result.optimisticGraph, 'should have created optimistic graph');
     assert.ok(result.pessimisticGraph, 'should have created pessimistic graph');
   });
 
-  it('should compute an observed value', async () => {
-    const settings = {throttlingMethod: 'provided'};
+  it('should compute an observed value (desktop)', async () => {
+    const settings = {throttlingMethod: 'provided', formFactor: 'desktop'};
     const context = {settings, computedCache: new Map()};
-    const result = await Interactive.request({trace, devtoolsLog, settings}, context);
+    const result = await Interactive.request({trace, devtoolsLog, gatherContext, settings},
+      context);
+
+    assert.equal(Math.round(result.timing), 1582);
+    assert.equal(result.timestamp, 225415754204);
+  });
+
+  it('should compute an observed value (mobile)', async () => {
+    const settings = {throttlingMethod: 'provided', formFactor: 'mobile'};
+    const context = {settings, computedCache: new Map()};
+    const result = await Interactive.request({trace, devtoolsLog, gatherContext, settings},
+      context);
 
     assert.equal(Math.round(result.timing), 1582);
     assert.equal(result.timestamp, 225415754204);
@@ -55,38 +70,38 @@ describe('Metrics: TTI', () => {
 
   describe('#findOverlappingQuietPeriods', () => {
     it('should return entire range when no activity is present', () => {
-      const navigationStart = 220023532;
-      const firstContentfulPaint = 2500 * 1000 + navigationStart;
-      const traceEnd = 10000 * 1000 + navigationStart;
-      const traceOfTab = {timestamps: {navigationStart, firstContentfulPaint, traceEnd}};
+      const timeOrigin = 220023532;
+      const firstContentfulPaint = 2500 * 1000 + timeOrigin;
+      const traceEnd = 10000 * 1000 + timeOrigin;
+      const processedTrace = {timestamps: {timeOrigin, firstContentfulPaint, traceEnd}};
 
       const cpu = [];
-      const network = generateNetworkRecords([], navigationStart);
+      const network = generateNetworkRecords([], timeOrigin);
 
-      const result = Interactive.findOverlappingQuietPeriods(cpu, network, traceOfTab);
+      const result = Interactive.findOverlappingQuietPeriods(cpu, network, processedTrace);
       assert.deepEqual(result.cpuQuietPeriod, {start: 0, end: traceEnd / 1000});
       assert.deepEqual(result.networkQuietPeriod, {start: 0, end: traceEnd / 1000});
     });
 
     it('should throw when trace ended too soon after FMP', () => {
-      const navigationStart = 220023532;
-      const firstContentfulPaint = 2500 * 1000 + navigationStart;
-      const traceEnd = 5000 * 1000 + navigationStart;
-      const traceOfTab = {timestamps: {navigationStart, firstContentfulPaint, traceEnd}};
+      const timeOrigin = 220023532;
+      const firstContentfulPaint = 2500 * 1000 + timeOrigin;
+      const traceEnd = 5000 * 1000 + timeOrigin;
+      const processedTrace = {timestamps: {timeOrigin, firstContentfulPaint, traceEnd}};
 
       const cpu = [];
-      const network = generateNetworkRecords([], navigationStart);
+      const network = generateNetworkRecords([], timeOrigin);
 
       assert.throws(() => {
-        Interactive.findOverlappingQuietPeriods(cpu, network, traceOfTab);
+        Interactive.findOverlappingQuietPeriods(cpu, network, processedTrace);
       }, /NO.*IDLE_PERIOD/);
     });
 
     it('should throw when CPU is quiet but network is not', () => {
-      const navigationStart = 220023532;
-      const firstContentfulPaint = 2500 * 1000 + navigationStart;
-      const traceEnd = 10000 * 1000 + navigationStart;
-      const traceOfTab = {timestamps: {navigationStart, firstContentfulPaint, traceEnd}};
+      const timeOrigin = 220023532;
+      const firstContentfulPaint = 2500 * 1000 + timeOrigin;
+      const traceEnd = 10000 * 1000 + timeOrigin;
+      const processedTrace = {timestamps: {timeOrigin, firstContentfulPaint, traceEnd}};
 
       const cpu = [];
       const network = generateNetworkRecords([
@@ -94,36 +109,36 @@ describe('Metrics: TTI', () => {
         {start: 2000, end: 9000},
         {start: 2000, end: 8000},
         {start: 2000, end: 8500},
-      ], navigationStart);
+      ], timeOrigin);
 
       assert.throws(() => {
-        Interactive.findOverlappingQuietPeriods(cpu, network, traceOfTab);
+        Interactive.findOverlappingQuietPeriods(cpu, network, processedTrace);
       }, /NO.*NETWORK_IDLE_PERIOD/);
     });
 
     it('should throw when network is quiet but CPU is not', () => {
-      const navigationStart = 220023532;
-      const firstContentfulPaint = 2500 * 1000 + navigationStart;
-      const traceEnd = 10000 * 1000 + navigationStart;
-      const traceOfTab = {timestamps: {navigationStart, firstContentfulPaint, traceEnd}};
+      const timeOrigin = 220023532;
+      const firstContentfulPaint = 2500 * 1000 + timeOrigin;
+      const traceEnd = 10000 * 1000 + timeOrigin;
+      const processedTrace = {timestamps: {timeOrigin, firstContentfulPaint, traceEnd}};
 
       const cpu = [
         {start: 3000, end: 8000},
       ];
       const network = generateNetworkRecords([
         {start: 0, end: 1900},
-      ], navigationStart);
+      ], timeOrigin);
 
       assert.throws(() => {
-        Interactive.findOverlappingQuietPeriods(cpu, network, traceOfTab);
+        Interactive.findOverlappingQuietPeriods(cpu, network, processedTrace);
       }, /NO.*CPU_IDLE_PERIOD/);
     });
 
     it('should ignore unnecessary network requests', () => {
-      const navigationStart = 220023532;
-      const firstContentfulPaint = 2500 * 1000 + navigationStart;
-      const traceEnd = 10000 * 1000 + navigationStart;
-      const traceOfTab = {timestamps: {navigationStart, firstContentfulPaint, traceEnd}};
+      const timeOrigin = 220023532;
+      const firstContentfulPaint = 2500 * 1000 + timeOrigin;
+      const traceEnd = 10000 * 1000 + timeOrigin;
+      const processedTrace = {timestamps: {timeOrigin, firstContentfulPaint, traceEnd}};
 
       const cpu = [];
       let network = generateNetworkRecords([
@@ -131,20 +146,20 @@ describe('Metrics: TTI', () => {
         {start: 0, end: 11000, failed: true},
         {start: 0, end: 11000, requestMethod: 'POST'},
         {start: 0, end: 11000, statusCode: 500},
-      ], navigationStart);
+      ], timeOrigin);
       // Triple the requests to ensure it's not just the 2-quiet kicking in
       network = network.concat(network).concat(network);
 
-      const result = Interactive.findOverlappingQuietPeriods(cpu, network, traceOfTab);
+      const result = Interactive.findOverlappingQuietPeriods(cpu, network, processedTrace);
       assert.deepEqual(result.cpuQuietPeriod, {start: 0, end: traceEnd / 1000});
       assert.deepEqual(result.networkQuietPeriod, {start: 0, end: traceEnd / 1000});
     });
 
     it('should find first overlapping quiet period', () => {
-      const navigationStart = 220023532;
-      const firstContentfulPaint = 10000 * 1000 + navigationStart;
-      const traceEnd = 45000 * 1000 + navigationStart;
-      const traceOfTab = {timestamps: {navigationStart, firstContentfulPaint, traceEnd}};
+      const timeOrigin = 220023532;
+      const firstContentfulPaint = 10000 * 1000 + timeOrigin;
+      const traceEnd = 45000 * 1000 + timeOrigin;
+      const processedTrace = {timestamps: {timeOrigin, firstContentfulPaint, traceEnd}};
 
       const cpu = [
         // quiet period before FMP
@@ -172,15 +187,15 @@ describe('Metrics: TTI', () => {
         {start: 28000, end: 32000},
         {start: 28000, end: 35000},
         // final quiet period
-      ], navigationStart);
+      ], timeOrigin);
 
-      const result = Interactive.findOverlappingQuietPeriods(cpu, network, traceOfTab);
+      const result = Interactive.findOverlappingQuietPeriods(cpu, network, processedTrace);
       assert.deepEqual(result.cpuQuietPeriod, {
-        start: 34000 + navigationStart / 1000,
+        start: 34000 + timeOrigin / 1000,
         end: traceEnd / 1000,
       });
       assert.deepEqual(result.networkQuietPeriod, {
-        start: 32000 + navigationStart / 1000,
+        start: 32000 + timeOrigin / 1000,
         end: traceEnd / 1000,
       });
       assert.equal(result.cpuQuietPeriods.length, 3);

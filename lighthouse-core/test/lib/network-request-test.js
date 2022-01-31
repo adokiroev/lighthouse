@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2019 Google Inc. All Rights Reserved.
+ * @license Copyright 2019 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -68,6 +68,45 @@ describe('NetworkRequest', () => {
       const record = NetworkRecorder.recordsFromLogs(devtoolsLog)[0];
 
       expect(record.transferSize).toStrictEqual(100);
+    });
+  });
+
+  describe('update protocol for Lightrider', () => {
+    function getRequest() {
+      return {
+        protocol: 'http/1.1',
+        responseHeaders: [{name: NetworkRequest.HEADER_PROTOCOL_IS_H2, value: '1'}],
+      };
+    }
+
+    it('does nothing if not Lightrider', () => {
+      const req = getRequest();
+
+      const devtoolsLog = networkRecordsToDevtoolsLog([req]);
+      const record = NetworkRecorder.recordsFromLogs(devtoolsLog)[0];
+
+      expect(record.protocol).toStrictEqual('http/1.1');
+    });
+
+    it('updates protocol if Lightrider', () => {
+      const req = getRequest();
+
+      const devtoolsLog = networkRecordsToDevtoolsLog([req]);
+      global.isLightrider = true;
+      const record = NetworkRecorder.recordsFromLogs(devtoolsLog)[0];
+
+      expect(record.protocol).toStrictEqual('h2');
+    });
+
+    it('does nothing if no header is set', () => {
+      const req = getRequest();
+      req.responseHeaders = [];
+
+      const devtoolsLog = networkRecordsToDevtoolsLog([req]);
+      global.isLightrider = true;
+      const record = NetworkRecorder.recordsFromLogs(devtoolsLog)[0];
+
+      expect(record.protocol).toStrictEqual('http/1.1');
     });
   });
 
@@ -237,6 +276,93 @@ describe('NetworkRequest', () => {
         requestMs: 2500,
         responseMs: 2500,
       });
+    });
+  });
+
+  describe('#isSecureRequest', () => {
+    const isSecureRequest = NetworkRequest.isSecureRequest;
+
+    it('correctly identifies insecure records', () => {
+      expect(isSecureRequest({parsedURL: {scheme: 'http', host: 'google.com'}})).toBe(false);
+      expect(isSecureRequest({parsedURL: {scheme: 'http', host: '54.33.21.23'}})).toBe(false);
+      expect(isSecureRequest({parsedURL: {scheme: 'ws', host: 'my-service.com'}})).toBe(false);
+      expect(isSecureRequest({parsedURL: {scheme: '', host: 'google.com'}})).toBe(false);
+      expect(isSecureRequest({
+        parsedURL: {scheme: 'http', host: 'google.com'},
+        redirectDestination: {parsedURL: {scheme: 'https', host: 'google.com'}},
+        responseHeaders: [],
+      })).toBe(false);
+    });
+
+    it('correctly identifies secure records', () => {
+      expect(isSecureRequest({parsedURL: {scheme: 'http', host: 'localhost'}})).toBe(true);
+      expect(isSecureRequest({parsedURL: {scheme: 'https', host: 'google.com'}})).toBe(true);
+      expect(isSecureRequest({parsedURL: {scheme: 'wss', host: 'my-service.com'}})).toBe(true);
+      expect(isSecureRequest({parsedURL: {scheme: 'data', host: ''}})).toBe(true);
+      expect(isSecureRequest({parsedURL: {scheme: 'blob', host: ''}})).toBe(true);
+      expect(isSecureRequest({parsedURL: {scheme: 'filesystem', host: ''}})).toBe(true);
+      expect(isSecureRequest({parsedURL: {scheme: 'about', host: ''}})).toBe(true);
+      expect(isSecureRequest({parsedURL: {scheme: '', host: ''}, protocol: 'blob'})).toBe(true);
+      expect(isSecureRequest({parsedURL: {scheme: 'chrome', host: ''}})).toBe(true);
+      expect(isSecureRequest({parsedURL: {scheme: 'chrome-extension', host: ''}})).toBe(true);
+      expect(isSecureRequest({
+        parsedURL: {scheme: 'http', host: 'google.com'},
+        redirectDestination: {parsedURL: {scheme: 'https', host: 'google.com'}},
+        responseHeaders: [{name: 'Non-Authoritative-Reason', value: 'HSTS'}],
+      })).toBe(true);
+    });
+  });
+
+  describe('#isHstsRequest', () => {
+    const isHstsRequest = NetworkRequest.isHstsRequest;
+
+    it('correctly identifies non-HSTS records', () => {
+      // missing a redirect destination
+      expect(isHstsRequest({
+        parsedURL: {scheme: 'http', host: 'google.com'},
+        responseHeaders: [{name: 'Non-Authoritative-Reason', value: 'HSTS'}],
+      })).toBe(false);
+
+      // no HSTS reason
+      expect(isHstsRequest({
+        parsedURL: {scheme: 'http', host: 'google.com'},
+        redirectDestination: {parsedURL: {scheme: 'https', host: 'google.com'}},
+        responseHeaders: [],
+      })).toBe(false);
+
+      // redirects to insecure
+      expect(isHstsRequest({
+        parsedURL: {scheme: 'http', host: 'google.com'},
+        redirectDestination: {parsedURL: {scheme: 'http', host: 'google.com'}},
+        responseHeaders: [{name: 'Non-Authoritative-Reason', value: 'HSTS'}],
+      })).toBe(false);
+    });
+
+    it('correctly identifies HSTS requests', () => {
+      expect(isHstsRequest({
+        parsedURL: {scheme: 'http', host: 'google.com'},
+        redirectDestination: {parsedURL: {scheme: 'https', host: 'google.com'}},
+        responseHeaders: [{name: 'Non-Authoritative-Reason', value: 'HSTS'}],
+      })).toBe(true);
+    });
+  });
+
+  describe('#isNonNetworkRequest', () => {
+    const isNonNetworkRequest = NetworkRequest.isNonNetworkRequest;
+
+    it('correctly identifies non-network records', () => {
+      // data protocol
+      expect(isNonNetworkRequest({protocol: 'data'})).toBe(true);
+
+      // filesystem scheme
+      expect(isNonNetworkRequest({protocol: '', parsedURL: {scheme: 'file'}})).toBe(true);
+    });
+
+    it('correctly identifies network records', () => {
+      expect(isNonNetworkRequest({
+        protocol: 'h2',
+        parsedURL: {scheme: 'http', host: 'google.com'},
+      })).toBe(false);
     });
   });
 });

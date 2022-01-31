@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
+ * @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -32,8 +32,8 @@ function generateArtifacts(images) {
 
     imageElements.push({
       src: url,
-      naturalWidth: image.width,
-      naturalHeight: image.height,
+      naturalDimensions: image,
+      node: {devtoolsNodePath: '1,HTML,1,IMG'},
     });
   }
 
@@ -58,13 +58,14 @@ describe('Page uses optimized images', () => {
     const artifacts = generateArtifacts([{originalSize: 15000, jpegSize: 4500}]);
     const auditResult = OptimizedImagesAudit.audit_(artifacts);
 
-    expect(auditResult.items).toEqual([
+    expect(auditResult.items).toMatchObject([
       {
         fromProtocol: true,
         isCrossOrigin: false,
         totalBytes: 15000,
         wastedBytes: 15000 - 4500,
         url: 'http://google.com/image.jpeg',
+        node: {path: '1,HTML,1,IMG'},
       },
     ]);
   });
@@ -73,13 +74,14 @@ describe('Page uses optimized images', () => {
     const artifacts = generateArtifacts([{originalSize: 1e6, width: 1000, height: 1000}]);
     const auditResult = OptimizedImagesAudit.audit_(artifacts);
 
-    expect(auditResult.items).toEqual([
+    expect(auditResult.items).toMatchObject([
       {
         fromProtocol: false,
         isCrossOrigin: false,
         totalBytes: 1e6,
         wastedBytes: 1e6 - 1000 * 1000 * 2 / 8,
         url: 'http://google.com/image.jpeg',
+        node: {path: '1,HTML,1,IMG'},
       },
     ]);
   });

@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2016 Google Inc. All Rights Reserved.
+ * @license Copyright 2016 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -8,7 +8,7 @@
 /* eslint-env jest */
 
 const URL = require('../../lib/url-shim.js');
-const assert = require('assert');
+const assert = require('assert').strict;
 const superLongName =
     'https://example.com/thisIsASuperLongURLThatWillTriggerFilenameTruncationWhichWeWantToTest.js';
 
@@ -301,6 +301,97 @@ describe('URL Shim', () => {
 
     it('returns false for invalid URLs', () => {
       assert.ok(!URL.equalWithExcludedFragments('utter nonsense', 'http://example.com'));
+    });
+  });
+
+  it('isLikeLocalhost', () => {
+    assert.ok(URL.isLikeLocalhost(new URL('http://localhost/').hostname));
+    assert.ok(URL.isLikeLocalhost(new URL('http://localhost:10200/').hostname));
+    assert.ok(URL.isLikeLocalhost(new URL('http://127.0.0.1/page.html').hostname));
+    assert.ok(URL.isLikeLocalhost(new URL('https://localhost/').hostname));
+    assert.ok(URL.isLikeLocalhost(new URL('https://dev.localhost/').hostname));
+
+    assert.ok(!URL.isLikeLocalhost(new URL('http://8.8.8.8/').hostname));
+    assert.ok(!URL.isLikeLocalhost(new URL('http://example.com/').hostname));
+  });
+
+  it('isSecureScheme', () => {
+    assert.ok(URL.isSecureScheme('wss'));
+    assert.ok(URL.isSecureScheme('about'));
+    assert.ok(URL.isSecureScheme('data'));
+    assert.ok(URL.isSecureScheme('filesystem'));
+
+    assert.ok(!URL.isSecureScheme('http'));
+    assert.ok(!URL.isSecureScheme('ws'));
+  });
+
+  it('isNonNetworkProtocol', () => {
+    assert.ok(URL.isNonNetworkProtocol('blob'));
+    assert.ok(URL.isNonNetworkProtocol('data'));
+    assert.ok(URL.isNonNetworkProtocol('data:'));
+    assert.ok(URL.isNonNetworkProtocol('intent:'));
+    assert.ok(URL.isNonNetworkProtocol('file:'));
+    assert.ok(URL.isNonNetworkProtocol('filesystem:'));
+    assert.ok(URL.isNonNetworkProtocol('filesystem'));
+
+    assert.ok(!URL.isNonNetworkProtocol('https:'));
+    assert.ok(!URL.isNonNetworkProtocol('http'));
+    assert.ok(!URL.isNonNetworkProtocol('ws'));
+  });
+
+  describe('guessMimeType', () => {
+    it('handles invalid url', () => {
+      expect(URL.guessMimeType('')).toEqual(undefined);
+      expect(URL.guessMimeType('I_AM_NO_URL')).toEqual(undefined);
+    });
+
+    it('uses mime type from data URI', () => {
+      expect(URL.guessMimeType('data:image/png;DATA')).toEqual('image/png');
+      expect(URL.guessMimeType('data:image/jpeg;DATA')).toEqual('image/jpeg');
+      expect(URL.guessMimeType('data:image/svg+xml;DATA')).toEqual('image/svg+xml');
+      expect(URL.guessMimeType('data:text/html;DATA')).toEqual(undefined);
+      expect(URL.guessMimeType('data:image/jpg;DATA')).toEqual(undefined);
+    });
+
+    it('uses path extension for normal files', () => {
+      expect(URL.guessMimeType('https://example.com/img.png')).toEqual('image/png');
+      expect(URL.guessMimeType('https://example.com/img.png?test')).toEqual('image/png');
+      expect(URL.guessMimeType('https://example.com/IMG.PNG')).toEqual('image/png');
+      expect(URL.guessMimeType('https://example.com/img.jpeg')).toEqual('image/jpeg');
+      expect(URL.guessMimeType('https://example.com/img.jpg')).toEqual('image/jpeg');
+      expect(URL.guessMimeType('https://example.com/img.svg')).toEqual('image/svg+xml');
+      expect(URL.guessMimeType('https://example.com/page.html')).toEqual(undefined);
+      expect(URL.guessMimeType('https://example.com/')).toEqual(undefined);
+    });
+  });
+
+  describe('normalizeUrl', () => {
+    it('returns normalized URL', () => {
+      expect(URL.normalizeUrl('https://example.com')).toEqual('https://example.com/');
+    });
+
+    it('rejects when not given a URL', () => {
+      expect(() => {
+        URL.normalizeUrl(undefined);
+      }).toThrow('INVALID_URL');
+    });
+
+    it('rejects when given a URL of zero length', () => {
+      expect(() => {
+        URL.normalizeUrl('');
+      }).toThrow('INVALID_URL');
+    });
+
+    it('rejects when given a URL without protocol', () => {
+      expect(() => {
+        URL.normalizeUrl('localhost');
+      }).toThrow('INVALID_URL');
+    });
+
+    it('rejects when given a URL without hostname', () => {
+      expect(() => {
+        URL.normalizeUrl('https://');
+      }).toThrow('INVALID_URL');
     });
   });
 });

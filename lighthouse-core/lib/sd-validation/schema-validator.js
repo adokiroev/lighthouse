@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2018 Google Inc. All Rights Reserved.
+ * @license Copyright 2018 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -12,7 +12,7 @@ const SCHEMA_ORG_URL_REGEX = /https?:\/\/schema\.org\//;
 
 /**
  * @param {string} uri
- * @returns {string}
+ * @return {string}
  */
 function cleanName(uri) {
   return uri.replace(SCHEMA_ORG_URL_REGEX, '');
@@ -20,7 +20,7 @@ function cleanName(uri) {
 
 /**
  * @param {string} type
- * @returns {Array<string>}
+ * @return {Array<string>}
  */
 function getPropsForType(type) {
   const cleanType = cleanName(type);
@@ -36,7 +36,7 @@ function getPropsForType(type) {
 
 /**
  * @param {string} type
- * @returns {{name: string, parent: Array<string>}|undefined}
+ * @return {{name: string, parent: Array<string>}|undefined}
  */
 function findType(type) {
   const cleanType = cleanName(type);
@@ -49,7 +49,7 @@ function findType(type) {
  *
  * @param {string|Array<string>} typeOrTypes
  * @param {Array<string>} keys
- * @returns {Array<Pick<LH.StructuredData.ValidationError, "message" | "validTypes"> & {key?: string}>}
+ * @return {Array<Pick<LH.StructuredData.ValidationError, "message" | "validTypes"> & {key?: string}>}
  */
 function validateObjectKeys(typeOrTypes, keys) {
   /** @type {Array<string>} */

@@ -1,5 +1,5 @@
 /**
- * @license Copyright 2017 Google Inc. All Rights Reserved.
+ * @license Copyright 2017 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
@@ -7,8 +7,9 @@
 
 const NetworkRecorder = require('../../lib/network-recorder.js');
 const networkRecordsToDevtoolsLog = require('../network-records-to-devtools-log.js');
-const assert = require('assert');
+const assert = require('assert').strict;
 const devtoolsLogItems = require('../fixtures/artifacts/perflog/defaultPass.devtoolslog.json');
+const prefetchedScriptDevtoolsLog = require('../fixtures/prefetched-script.devtoolslog.json');
 const redirectsDevtoolsLog = require('../fixtures/wikipedia-redirect.devtoolslog.json');
 const redirectsScriptDevtoolsLog = require('../fixtures/redirects-from-script.devtoolslog.json');
 const lrRequestDevtoolsLog = require('../fixtures/lr.devtoolslog.json');
@@ -195,127 +196,493 @@ describe('network recorder', function() {
     ).params.requestId;
 
     for (const log of devtoolsLogs) {
-      if (log.params.requestId === requestId1) log.source = {sessionId: '1', targetId: 'a'};
+      if (log.params.requestId === requestId1) log.sessionId = '1';
 
       if (log.params.requestId === requestId2 && log.method === 'Network.loadingFinished') {
-        log.source = {sessionId: '2', targetId: 'b'};
+        log.sessionId = '2';
       }
     }
 
     const records = NetworkRecorder.recordsFromLogs(devtoolsLogs);
     expect(records).toMatchObject([
-      {url: 'http://example.com', sessionId: undefined, targetId: undefined},
-      {url: 'http://iframe.com', sessionId: '1', targetId: 'a'},
-      {url: 'http://other-iframe.com', sessionId: '2', targetId: 'b'},
+      {url: 'http://example.com', sessionId: undefined},
+      {url: 'http://iframe.com', sessionId: '1'},
+      {url: 'http://other-iframe.com', sessionId: '2'},
     ]);
   });
 
-  describe('#findNetworkQuietPeriods', () => {
-    function record(data) {
-      const url = data.url || 'https://example.com';
-      const scheme = url.split(':')[0];
-      return Object.assign({
-        url,
-        finished: !!data.endTime,
-        parsedURL: {scheme},
-      }, data);
-    }
+  it('should handle prefetch requests', () => {
+    const records = NetworkRecorder.recordsFromLogs(prefetchedScriptDevtoolsLog);
+    expect(records).toHaveLength(5);
 
-    it('should find the 0-quiet periods', () => {
-      const records = [
-        record({startTime: 0, endTime: 1}),
-        record({startTime: 2, endTime: 3}),
-        record({startTime: 4, endTime: 5}),
-      ];
+    const [mainDocument, loaderPrefetch, _ /* favicon */, loaderScript, implScript] = records;
+    expect(mainDocument.initiatorRequest).toBe(undefined);
+    expect(loaderPrefetch.startTime < loaderScript.startTime).toBe(true);
+    expect(loaderPrefetch.resourceType).toBe('Other');
+    expect(loaderPrefetch.initiatorRequest).toBe(mainDocument);
+    expect(loaderScript.resourceType).toBe('Script');
+    expect(loaderScript.initiatorRequest).toBe(mainDocument);
+    expect(implScript.resourceType).toBe('Script');
+    expect(implScript.initiatorRequest).toBe(loaderScript);
+  });
 
-      const periods = NetworkRecorder.findNetworkQuietPeriods(records, 0);
-      assert.deepStrictEqual(periods, [
-        {start: 1000, end: 2000},
-        {start: 3000, end: 4000},
-        {start: 5000, end: Infinity},
-      ]);
-    });
+  it('Not set initiators when timings are invalid', () => {
+    // Note that the followings are contrived for testing purposes and are
+    // unlikely to occur in practice.
+    const logs = [
+      { // initiator
+        'method': 'Network.requestWillBeSent',
+        'params': {
+          'requestId': '1',
+          'frameId': '1',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'request': {
+            'url': 'https://www.example.com/initiator',
+            'method': 'GET',
+            'mixedContentType': 'none',
+            'initialPriority': 'VeryHigh',
+          },
+          'timestamp': 107988.912007,
+          'wallTime': 1466620735.21187,
+          'initiator': {
+            'type': 'other',
+          },
+          'type': 'Other',
+        },
+      },
+      { // initiator response
+        'method': 'Network.responseReceived',
+        'params': {
+          'requestId': '1',
+          'frameId': '1',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'response': {
+            'url': 'https://www.example.com/initiator',
+            'status': '200',
+            'headers': {},
+          },
+          'timestamp': 108088.912007,
+          'wallTime': 1466620835.21187,
+        },
+      },
+      { // initiated
+        'method': 'Network.requestWillBeSent',
+        'params': {
+          'requestId': '2',
+          'frameId': '1',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'request': {
+            'url': 'https://www.example.com/initiated',
+            'method': 'GET',
+            'mixedContentType': 'none',
+            'initialPriority': 'VeryHigh',
+          },
+          'timestamp': 106988.912007,
+          'wallTime': 1466620635.21187,
+          'initiator': {
+            'type': 'script',
+            'url': 'https://www.example.com/initiator',
+          },
+          'type': 'Other',
+        },
+      },
+    ];
+    const records = NetworkRecorder.recordsFromLogs(logs);
+    expect(records).toHaveLength(2);
 
-    it('should find the 2-quiet periods', () => {
-      const records = [
-        record({startTime: 0, endTime: 1.5}),
-        record({startTime: 0, endTime: 2}),
-        record({startTime: 0, endTime: 2.5}),
-        record({startTime: 2, endTime: 3}),
-        record({startTime: 4, endTime: 5}),
-      ];
+    const [initiator, initiated] = records;
+    expect(initiator.initiatorRequest).toBe(undefined);
+    expect(initiated.initiatorRequest).toBe(undefined);
+  });
 
-      const periods = NetworkRecorder.findNetworkQuietPeriods(records, 2);
-      assert.deepStrictEqual(periods, [
-        {start: 1500, end: Infinity},
-      ]);
-    });
+  it(`should allow 'Other' initiators when unambiguous`, () => {
+    // Note that the followings are contrived for testing purposes and are
+    // unlikely to occur in practice. In particular, the initiator's timestamp
+    // is after the initiated's timestamp.
+    const logs = [
+      { // initiator
+        'method': 'Network.requestWillBeSent',
+        'params': {
+          'requestId': '1',
+          'frameId': '1',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'request': {
+            'url': 'https://www.example.com/initiator',
+            'method': 'GET',
+            'mixedContentType': 'none',
+            'initialPriority': 'VeryHigh',
+          },
+          'timestamp': 107988.912007,
+          'wallTime': 1466620735.21187,
+          'initiator': {
+            'type': 'other',
+          },
+          'type': 'Other',
+        },
+      },
+      { // initiated
+        'method': 'Network.requestWillBeSent',
+        'params': {
+          'requestId': '2',
+          'frameId': '1',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'request': {
+            'url': 'https://www.example.com/initiated',
+            'method': 'GET',
+            'mixedContentType': 'none',
+            'initialPriority': 'VeryHigh',
+          },
+          'timestamp': 108088.912007,
+          'wallTime': 1466620835.21187,
+          'initiator': {
+            'type': 'script',
+            'url': 'https://www.example.com/initiator',
+          },
+          'type': 'Other',
+        },
+      },
+    ];
+    const records = NetworkRecorder.recordsFromLogs(logs);
+    expect(records).toHaveLength(2);
 
-    it('should handle unfinished requests', () => {
-      const records = [
-        record({startTime: 0, endTime: 1.5}),
-        record({startTime: 0, endTime: 2}),
-        record({startTime: 0, endTime: 2.5}),
-        record({startTime: 2, endTime: 3}),
-        record({startTime: 2}),
-        record({startTime: 2}),
-        record({startTime: 4, endTime: 5}),
-        record({startTime: 5.5}),
-      ];
+    const [initiator, initiated] = records;
+    expect(initiator.initiatorRequest).toBe(undefined);
+    expect(initiated.initiatorRequest).toBe(initiator);
+  });
 
-      const periods = NetworkRecorder.findNetworkQuietPeriods(records, 2);
-      assert.deepStrictEqual(periods, [
-        {start: 1500, end: 2000},
-        {start: 3000, end: 4000},
-        {start: 5000, end: 5500},
-      ]);
-    });
+  it('should give higher precedence to same-frame initiators', () => {
+    // Note that the followings are contrived for testing purposes and are
+    // unlikely to occur in practice. In particular, the initiator's timestamp
+    // is after the initiated's timestamp.
+    const logs = [
+      { // initiator (frame 1)
+        'method': 'Network.requestWillBeSent',
+        'params': {
+          'requestId': '1',
+          'frameId': '1',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'request': {
+            'url': 'https://www.example.com/initiator',
+            'method': 'GET',
+            'mixedContentType': 'none',
+            'initialPriority': 'VeryHigh',
+          },
+          'timestamp': 107988.912007,
+          'wallTime': 1466620735.21187,
+          'initiator': {
+            'type': 'other',
+          },
+          'type': 'Script',
+        },
+      },
+      { // initiator (frame 2)
+        'method': 'Network.requestWillBeSent',
+        'params': {
+          'requestId': '2',
+          'frameId': '2',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'request': {
+            'url': 'https://www.example.com/initiator',
+            'method': 'GET',
+            'mixedContentType': 'none',
+            'initialPriority': 'VeryHigh',
+          },
+          'timestamp': 108088.912007,
+          'wallTime': 1466620835.21187,
+          'initiator': {
+            'type': 'other',
+          },
+          'type': 'Script',
+        },
+      },
+      { // initiated (frame 2)
+        'method': 'Network.requestWillBeSent',
+        'params': {
+          'requestId': '3',
+          'frameId': '2',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'request': {
+            'url': 'https://www.example.com/initiated',
+            'method': 'GET',
+            'mixedContentType': 'none',
+            'initialPriority': 'VeryHigh',
+          },
+          'timestamp': 108188.912007,
+          'wallTime': 1466620935.21187,
+          'initiator': {
+            'type': 'script',
+            'url': 'https://www.example.com/initiator',
+          },
+          'type': 'Script',
+        },
+      },
+    ];
+    const records = NetworkRecorder.recordsFromLogs(logs);
+    expect(records).toHaveLength(3);
 
-    it('should ignore data URIs', () => {
-      const records = [
-        record({startTime: 0, endTime: 1}),
-        record({startTime: 0, endTime: 2, url: 'data:image/png;base64,'}),
-      ];
+    const [initiator1, initiator2, initiated] = records;
+    expect(initiator1.frameId).toBe('1');
+    expect(initiator1.initiatorRequest).toBe(undefined);
+    expect(initiator2.frameId).toBe('2');
+    expect(initiator2.initiatorRequest).toBe(undefined);
+    expect(initiated.initiatorRequest).toBe(initiator2);
+  });
 
-      const periods = NetworkRecorder.findNetworkQuietPeriods(records, 0);
-      assert.deepStrictEqual(periods, [
-        {start: 1000, end: Infinity},
-      ]);
-    });
+  it('should give higher precedence to document initiators', () => {
+    const logs = [
+      { // initiator (Document)
+        'method': 'Network.requestWillBeSent',
+        'params': {
+          'requestId': '1',
+          'frameId': '1',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'request': {
+            'url': 'https://www.example.com/initiator',
+            'method': 'GET',
+            'mixedContentType': 'none',
+            'initialPriority': 'VeryHigh',
+          },
+          'timestamp': 107988.912007,
+          'wallTime': 1466620735.21187,
+          'initiator': {
+            'type': 'other',
+          },
+          'type': 'Document',
+        },
+      },
+      { // initiator (XHR)
+        'method': 'Network.requestWillBeSent',
+        'params': {
+          'requestId': '2',
+          'frameId': '1',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'request': {
+            'url': 'https://www.example.com/initiator',
+            'method': 'GET',
+            'mixedContentType': 'none',
+            'initialPriority': 'VeryHigh',
+          },
+          'timestamp': 108088.912007,
+          'wallTime': 1466620835.21187,
+          'initiator': {
+            'type': 'other',
+          },
+          'type': 'XHR',
+        },
+      },
+      { // initiated
+        'method': 'Network.requestWillBeSent',
+        'params': {
+          'requestId': '3',
+          'frameId': '1',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'request': {
+            'url': 'https://www.example.com/initiated',
+            'method': 'GET',
+            'mixedContentType': 'none',
+            'initialPriority': 'VeryHigh',
+          },
+          'timestamp': 108188.912007,
+          'wallTime': 1466620935.21187,
+          'initiator': {
+            'type': 'parser',
+            'url': 'https://www.example.com/initiator',
+          },
+          'type': 'Script',
+        },
+      },
+    ];
+    const records = NetworkRecorder.recordsFromLogs(logs);
+    expect(records).toHaveLength(3);
 
-    it('should handle iframe requests', () => {
-      const iframeRequest = {
-        finished: false,
-        url: 'https://iframe.com',
-        documentURL: 'https://iframe.com',
-        responseReceivedTime: 1.2,
-      };
+    const [initiator1, initiator2, initiated] = records;
+    expect(initiator1.initiatorRequest).toBe(undefined);
+    expect(initiator2.initiatorRequest).toBe(undefined);
+    expect(initiated.initiatorRequest).toBe(initiator1);
+  });
 
-      const records = [
-        record({startTime: 0, endTime: 1}),
-        record({startTime: 0, endTime: 1.2, ...iframeRequest}),
-      ];
+  it('should give higher precedence to same-frame initiators unless timing is invalid', () => {
+    // Note that the followings are contrived for testing purposes and are
+    // unlikely to occur in practice. In particular, the initiator's timestamp
+    // is after the initiated's timestamp.
+    const logs = [
+      { // initiator (frame 1)
+        'method': 'Network.requestWillBeSent',
+        'params': {
+          'requestId': '1',
+          'frameId': '1',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'request': {
+            'url': 'https://www.example.com/initiator',
+            'method': 'GET',
+            'mixedContentType': 'none',
+            'initialPriority': 'VeryHigh',
+          },
+          'timestamp': 107988.912007,
+          'wallTime': 1466620735.21187,
+          'initiator': {
+            'type': 'other',
+          },
+          'type': 'Script',
+        },
+      },
+      { // initiator (frame 2)
+        'method': 'Network.requestWillBeSent',
+        'params': {
+          'requestId': '2',
+          'frameId': '2',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'request': {
+            'url': 'https://www.example.com/initiator',
+            'method': 'GET',
+            'mixedContentType': 'none',
+            'initialPriority': 'VeryHigh',
+          },
+          'timestamp': 108388.912007,
+          'wallTime': 1466621035.21187,
+          'initiator': {
+            'type': 'other',
+          },
+          'type': 'Script',
+        },
+      },
+      {
+        'method': 'Network.responseReceived',
+        'params': {
+          'requestId': '2',
+          'frameId': '2',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'response': {
+            'url': 'https://www.example.com/initiator',
+            'status': '200',
+            'headers': {},
+          },
+          'timestamp': 108488.912007,
+          'wallTime': 1466621135.21187,
+        },
+      },
+      { // initiated (frame 2)
+        'method': 'Network.requestWillBeSent',
+        'params': {
+          'requestId': '3',
+          'frameId': '2',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'request': {
+            'url': 'https://www.example.com/initiated',
+            'method': 'GET',
+            'mixedContentType': 'none',
+            'initialPriority': 'VeryHigh',
+          },
+          'timestamp': 108188.912007,
+          'wallTime': 1466620935.21187,
+          'initiator': {
+            'type': 'script',
+            'url': 'https://www.example.com/initiator',
+          },
+          'type': 'Script',
+        },
+      },
+    ];
+    const records = NetworkRecorder.recordsFromLogs(logs);
+    expect(records).toHaveLength(3);
 
-      const periods = NetworkRecorder.findNetworkQuietPeriods(records, 0);
-      assert.deepStrictEqual(periods, []);
-    });
+    const [initiator1, initiator2, initiated] = records;
+    expect(initiator1.frameId).toBe('1');
+    expect(initiator1.initiatorRequest).toBe(undefined);
+    expect(initiator2.frameId).toBe('2');
+    expect(initiator2.initiatorRequest).toBe(undefined);
+    expect(initiator2.startTime > initiated.startTime).toBe(true);
+    expect(initiated.initiatorRequest).toBe(initiator1);
+  });
 
-    it('should handle QUIC requests', () => {
-      const quicRequest = {
-        finished: false,
-        responseHeaders: [{name: 'ALT-SVC', value: 'hq=":49288";quic="1,1abadaba,51303334,0"'}],
-        timing: {receiveHeadersEnd: 1.28},
-      };
+  it('should not set initiator when ambiguous', () => {
+    const logs = [
+      { // initiator A
+        'method': 'Network.requestWillBeSent',
+        'params': {
+          'requestId': '1',
+          'frameId': '1',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'request': {
+            'url': 'https://www.example.com/initiator',
+            'method': 'GET',
+            'mixedContentType': 'none',
+            'initialPriority': 'VeryHigh',
+          },
+          'timestamp': 107988.912007,
+          'wallTime': 1466620735.21187,
+          'initiator': {
+            'type': 'other',
+          },
+          'type': 'Script',
+        },
+      },
+      { // initiator B
+        'method': 'Network.requestWillBeSent',
+        'params': {
+          'requestId': '2',
+          'frameId': '1',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'request': {
+            'url': 'https://www.example.com/initiator',
+            'method': 'GET',
+            'mixedContentType': 'none',
+            'initialPriority': 'VeryHigh',
+          },
+          'timestamp': 108388.912007,
+          'wallTime': 1466621035.21187,
+          'initiator': {
+            'type': 'other',
+          },
+          'type': 'Script',
+        },
+      },
+      { // initiated
+        'method': 'Network.requestWillBeSent',
+        'params': {
+          'requestId': '3',
+          'frameId': '2',
+          'loaderId': '1',
+          'documentURL': 'https://www.example.com/home',
+          'request': {
+            'url': 'https://www.example.com/initiated',
+            'method': 'GET',
+            'mixedContentType': 'none',
+            'initialPriority': 'VeryHigh',
+          },
+          'timestamp': 108188.912007,
+          'wallTime': 1466620935.21187,
+          'initiator': {
+            'type': 'script',
+            'url': 'https://www.example.com/initiator',
+          },
+          'type': 'Script',
+        },
+      },
+    ];
+    const records = NetworkRecorder.recordsFromLogs(logs);
+    expect(records).toHaveLength(3);
 
-      const records = [
-        record({startTime: 0, endTime: 1}),
-        record({startTime: 0, endTime: 2, ...quicRequest}),
-      ];
-
-      const periods = NetworkRecorder.findNetworkQuietPeriods(records, 0);
-      assert.deepStrictEqual(periods, [
-        {start: 2000, end: Infinity},
-      ]);
-    });
+    const [initiator1, initiator2, initiated] = records;
+    expect(initiator1.initiatorRequest).toBe(undefined);
+    expect(initiator2.initiatorRequest).toBe(undefined);
+    expect(initiated.initiatorRequest).toBe(undefined);
   });
 });

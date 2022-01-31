@@ -1,17 +1,18 @@
 /**
- * @license Copyright 2016 Google Inc. All Rights Reserved.
+ * @license Copyright 2016 The Lighthouse Authors. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
  */
 'use strict';
 
+const process = require('process');
 const debug = require('debug');
 const marky = require('marky');
 
 const EventEmitter = require('events').EventEmitter;
 const isWindows = process.platform === 'win32';
 
-// process.browser is set when browserify'd via the `process` npm module
+// @ts-expect-error: process.browser is set via Rollup.
 const isBrowser = process.browser;
 
 const colors = {
@@ -23,7 +24,7 @@ const colors = {
   magenta: isBrowser ? 'palevioletred' : 5,
 };
 
-// whitelist non-red/yellow colors for debug()
+// allow non-red/yellow colors for debug()
 debug.colors = [colors.cyan, colors.green, colors.blue, colors.magenta];
 
 class Emitter extends EventEmitter {
@@ -61,6 +62,7 @@ class Log {
   }
 
   static loggerfn(title) {
+    title = `LH:${title}`;
     let log = loggersByTitle[title];
     if (!log) {
       log = debug(title);
@@ -82,16 +84,16 @@ class Log {
     level_ = level;
     switch (level) {
       case 'silent':
-        debug.enable('-*');
+        debug.enable('-LH:*');
         break;
       case 'verbose':
-        debug.enable('*');
+        debug.enable('LH:*');
         break;
       case 'error':
-        debug.enable('-*, *:error');
+        debug.enable('-LH:*, LH:*:error');
         break;
       default:
-        debug.enable('*, -*:verbose');
+        debug.enable('LH:*, -LH:*:verbose');
     }
   }
 
@@ -105,7 +107,7 @@ class Log {
     const columns = (!process || process.browser) ? Infinity : process.stdout.columns;
     const method = data.method || '?????';
     const maxLength = columns - method.length - prefix.length - loggingBufferColumns;
-    // IO.read blacklisted here to avoid logging megabytes of trace data
+    // IO.read ignored here to avoid logging megabytes of trace data
     const snippet = (data.params && method !== 'IO.read') ?
       JSON.stringify(data.params).substr(0, maxLength) : '';
     Log._logToStdErr(`${prefix}:${level || ''}`, [method, snippet]);
