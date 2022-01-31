@@ -61,12 +61,11 @@ function init(opts) {
 
   try {
     const Sentry = require('@sentry/node');
-    const sentryConfig = Object.assign({}, opts.environmentData,
-      {
-        dsn: SENTRY_URL,
-        captureUnhandledRejections: true,
-      });
-    Sentry.init(sentryConfig);
+    Sentry.init({
+      ...opts.environmentData,
+      dsn: SENTRY_URL,
+      captureUnhandledRejections: true,
+    });
 
     const context = {
       ...opts.environmentData.extra,
