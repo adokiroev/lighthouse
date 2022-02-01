@@ -123,7 +123,7 @@ function init(opts) {
       return new Promise(resolve => {
         Sentry.withScope(scope => {
           if (opts.level) {
-            // @ts-ignore - allow any string.
+            // @ts-expect-error - allow any string.
             scope.setLevel(opts.level);
           }
           if (opts.tags) {

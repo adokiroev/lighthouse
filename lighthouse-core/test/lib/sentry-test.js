@@ -57,7 +57,7 @@ describe('Sentry', () => {
       expect(sentryNode.init).not.toHaveBeenCalled();
     });
 
-    it('should initialize the raven client when enableErrorReporting', () => {
+    it('should initialize the Sentry client when enableErrorReporting', () => {
       Sentry.init({
         url: 'http://example.com',
         flags: {
@@ -79,7 +79,7 @@ describe('Sentry', () => {
   });
 
   describe('.captureException', () => {
-    it('should forward exceptions to raven client', async () => {
+    it('should forward exceptions to Sentry client', async () => {
       Sentry.init(configPayload);
       const error = new Error('oops');
       await Sentry.captureException(error);

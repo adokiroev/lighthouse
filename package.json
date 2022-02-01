@@ -121,7 +121,6 @@
     "@types/lodash.set": "^4.3.6",
     "@types/node": "*",
     "@types/pako": "^1.0.1",
-    "@types/raven": "^2.5.1",
     "@types/resize-observer-browser": "^0.1.1",
     "@types/semver": "^5.5.0",
     "@types/tabulator-tables": "^4.9.1",
