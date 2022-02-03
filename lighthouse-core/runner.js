@@ -49,7 +49,7 @@ class Runner {
         message: 'Run started',
         category: 'lifecycle',
         // TODO is this really needed? the 'extra' data is already set at the end of sentry.js ... why put in breadcrumb?
-        data: sentryContext?.extra,
+        data: sentryContext,
       });
 
       const artifacts = await this.gatherAndManageArtifacts(gatherFn, runOpts);

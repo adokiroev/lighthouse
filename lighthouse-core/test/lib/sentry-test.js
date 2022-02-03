@@ -71,6 +71,7 @@ describe('Sentry', () => {
       expect(sentryNode.init).toHaveBeenCalled();
       expect(sentryNode.setExtras).toHaveBeenCalled();
       expect(sentryNode.setExtras.mock.calls[0][0]).toEqual({
+        channel: 'cli',
         url: 'http://example.com',
         formFactor: 'desktop',
         throttlingMethod: 'devtools',

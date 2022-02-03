@@ -66,19 +66,19 @@ function init(opts) {
       dsn: SENTRY_URL,
     });
 
-    const context = {
+    const extras = {
       ...opts.flags.throttling,
-      channel: 'cli',
+      channel: opts.flags.channel || 'cli',
       url: opts.url,
       formFactor: opts.flags.formFactor,
       throttlingMethod: opts.flags.throttlingMethod,
     };
-    Sentry.setExtras(context);
+    Sentry.setExtras(extras);
 
     // Have each delegate function call the corresponding sentry function by default
     sentryDelegate.captureMessage = (...args) => Sentry.captureMessage(...args);
     sentryDelegate.captureBreadcrumb = (...args) => Sentry.addBreadcrumb(...args);
-    sentryDelegate.getContext = () => context;
+    sentryDelegate.getContext = () => extras;
 
     // Keep a record of exceptions per audit/gatherer so we can just report once
     const sentryExceptionCache = new Map();
