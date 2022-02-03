@@ -18,7 +18,7 @@ const {getBaseArtifacts, finalizeArtifacts} = require('./base-artifacts.js');
 
 /**
  * @param {{page: import('puppeteer').Page, config?: LH.Config.Json, configContext?: LH.Config.FRContext}} options
- * @return {Promise<{endTimespan(): Promise<LH.RunnerResult|undefined>}>}
+ * @return {Promise<{endTimespan(): Promise<LH.Gatherer.FRGatherResult>}>}
  */
 async function startTimespan(options) {
   const {configContext = {}} = options;
@@ -66,7 +66,7 @@ async function startTimespan(options) {
         },
         runnerOptions
       );
-      return Runner.audit(artifacts, runnerOptions);
+      return {artifacts, runnerOptions};
     },
   };
 }

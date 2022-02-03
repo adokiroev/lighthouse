@@ -70,6 +70,8 @@ async function waitForImagesToLoad(page) {
 
     await flow.navigate('https://www.mikescerealshack.co/corrections');
 
+    await flow.endFlow();
+
     const flowResult = flow.getFlowResult();
 
     fs.writeFileSync(

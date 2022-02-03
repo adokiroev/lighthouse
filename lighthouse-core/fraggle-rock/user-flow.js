@@ -9,10 +9,12 @@ const {generateFlowReportHtml} = require('../../report/generator/report-generato
 const {snapshot} = require('./gather/snapshot-runner.js');
 const {startTimespan} = require('./gather/timespan-runner.js');
 const {navigation} = require('./gather/navigation-runner.js');
+const Runner = require('../runner.js');
 
 /** @typedef {Parameters<snapshot>[0]} FrOptions */
 /** @typedef {Omit<FrOptions, 'page'> & {name?: string}} UserFlowOptions */
 /** @typedef {Omit<FrOptions, 'page'> & {stepName?: string}} StepOptions */
+/** @typedef {{gatherResult: LH.Gatherer.FRGatherResult, name: string}} StepArtifact */
 
 class UserFlow {
   /**
@@ -24,8 +26,10 @@ class UserFlow {
     this.options = {page, ...options};
     /** @type {string|undefined} */
     this.name = options?.name;
-    /** @type {LH.FlowResult.Step[]} */
-    this.steps = [];
+    /** @type {StepArtifact[]} */
+    this.stepArtifacts = [];
+    /** @type {LH.FlowResult|undefined} */
+    this.flowResult = undefined;
   }
 
   /**
@@ -38,12 +42,12 @@ class UserFlow {
   }
 
   /**
-   * @param {LH.Result} lhr
+   * @param {LH.Artifacts} artifacts
    * @return {string}
    */
-  _getDefaultStepName(lhr) {
-    const shortUrl = this._shortenUrl(lhr.finalUrl);
-    switch (lhr.gatherMode) {
+  _getDefaultStepName(artifacts) {
+    const shortUrl = this._shortenUrl(artifacts.URL.finalUrl);
+    switch (artifacts.GatherContext.gatherMode) {
       case 'navigation':
         return `Navigation report (${shortUrl})`;
       case 'timespan':
@@ -67,7 +71,8 @@ class UserFlow {
     }
 
     // On repeat navigations, we want to disable storage reset by default (i.e. it's not a cold load).
-    const isSubsequentNavigation = this.steps.some(step => step.lhr.gatherMode === 'navigation');
+    const isSubsequentNavigation = this.stepArtifacts
+      .some(step => step.gatherResult.artifacts.GatherContext.gatherMode === 'navigation');
     if (isSubsequentNavigation) {
       if (settingsOverrides.disableStorageReset === undefined) {
         settingsOverrides.disableStorageReset = true;
@@ -87,16 +92,15 @@ class UserFlow {
   async navigate(url, stepOptions) {
     if (this.currentTimespan) throw Error('Timespan already in progress');
 
-    const result = await navigation(this._getNextNavigationOptions(url, stepOptions));
-    if (!result) throw Error('Navigation returned undefined');
+    const gatherResult = await navigation(this._getNextNavigationOptions(url, stepOptions));
 
     const providedName = stepOptions?.stepName;
-    this.steps.push({
-      lhr: result.lhr,
-      name: providedName || this._getDefaultStepName(result.lhr),
+    this.stepArtifacts.push({
+      gatherResult,
+      name: providedName || this._getDefaultStepName(gatherResult.artifacts),
     });
 
-    return result;
+    return gatherResult;
   }
 
   /**
@@ -114,17 +118,16 @@ class UserFlow {
     if (!this.currentTimespan) throw Error('No timespan in progress');
 
     const {timespan, options} = this.currentTimespan;
-    const result = await timespan.endTimespan();
+    const gatherResult = await timespan.endTimespan();
     this.currentTimespan = undefined;
-    if (!result) throw Error('Timespan returned undefined');
 
     const providedName = options?.stepName;
-    this.steps.push({
-      lhr: result.lhr,
-      name: providedName || this._getDefaultStepName(result.lhr),
+    this.stepArtifacts.push({
+      gatherResult,
+      name: providedName || this._getDefaultStepName(gatherResult.artifacts),
     });
 
-    return result;
+    return gatherResult;
   }
 
   /**
@@ -134,26 +137,49 @@ class UserFlow {
     if (this.currentTimespan) throw Error('Timespan already in progress');
 
     const options = {...this.options, ...stepOptions};
-    const result = await snapshot(options);
-    if (!result) throw Error('Snapshot returned undefined');
+    const gatherResult = await snapshot(options);
+    if (!gatherResult) throw Error('Snapshot returned undefined');
 
     const providedName = stepOptions?.stepName;
-    this.steps.push({
-      lhr: result.lhr,
-      name: providedName || this._getDefaultStepName(result.lhr),
+    this.stepArtifacts.push({
+      gatherResult,
+      name: providedName || this._getDefaultStepName(gatherResult.artifacts),
     });
 
-    return result;
+    return gatherResult;
+  }
+
+  /**
+   * @returns {Promise<LH.FlowResult>}
+   */
+  async endFlow() {
+    if (this.flowResult) return this.flowResult;
+    if (!this.stepArtifacts.length) {
+      throw Error('Need at least one step before ending the flow');
+    }
+    const url = new URL(this.stepArtifacts[0].gatherResult.artifacts.URL.finalUrl);
+    const flowName = this.name || `User flow (${url.hostname})`;
+
+    /** @type {LH.FlowResult['steps']} */
+    const steps = [];
+    for (const {gatherResult, name} of this.stepArtifacts) {
+      const result = await Runner.audit(gatherResult.artifacts, gatherResult.runnerOptions);
+      if (!result) throw new Error(`Step "${name}" did not return a result`);
+      steps.push({lhr: result.lhr, name});
+    }
+
+    this.flowResult = {steps, name: flowName};
+    return this.flowResult;
   }
 
   /**
    * @return {LH.FlowResult}
    */
   getFlowResult() {
-    if (!this.steps.length) throw Error('Need at least one step before getting the flow result');
-    const url = new URL(this.steps[0].lhr.finalUrl);
-    const name = this.name || `User flow (${url.hostname})`;
-    return {steps: this.steps, name};
+    if (!this.flowResult) {
+      throw Error('Must end the flow before getting the result');
+    }
+    return this.flowResult;
   }
 
   /**
