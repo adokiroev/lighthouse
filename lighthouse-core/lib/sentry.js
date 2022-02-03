@@ -64,11 +64,9 @@ function init(opts) {
     Sentry.init({
       ...opts.environmentData,
       dsn: SENTRY_URL,
-      captureUnhandledRejections: true,
     });
 
     const context = {
-      ...opts.environmentData.extra,
       ...opts.flags.throttling,
       url: opts.url,
       formFactor: opts.flags.formFactor,
