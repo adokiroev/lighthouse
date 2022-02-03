@@ -68,6 +68,7 @@ function init(opts) {
 
     const context = {
       ...opts.flags.throttling,
+      channel: 'cli',
       url: opts.url,
       formFactor: opts.flags.formFactor,
       throttlingMethod: opts.flags.throttlingMethod,
