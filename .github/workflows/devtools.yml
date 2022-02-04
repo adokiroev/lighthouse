@@ -161,10 +161,6 @@ jobs:
     - run: mkdir latest-run
       working-directory: ${{ github.workspace }}/lighthouse
     - name: yarn smoke --runner devtools
-      # TODO: run on all tests.
-      # - Current DevTools hangs on any page with a service worker.
-      #   https://github.com/GoogleChrome/lighthouse/issues/13396
-      # - Various other issues that needed investigation.
       # Disabled because normal Chrome usage makes DevTools not function on these poorly constructed pages
       #   errors-expired-ssl errors-infinite-loop
       # Disabled because Chrome will follow the redirect first, and Lighthouse will only ever see/run the final URL.
