@@ -119,21 +119,18 @@ function init(opts) {
         opts.tags.protocolMethod = err.protocolMethod;
       }
 
-      return new Promise(resolve => {
-        Sentry.withScope(scope => {
-          if (opts.level) {
-            // @ts-expect-error - allow any string.
-            scope.setLevel(opts.level);
-          }
-          if (opts.tags) {
-            scope.setTags(opts.tags);
-          }
-          if (opts.extra) {
-            scope.setExtras(opts.extra);
-          }
-          Sentry.captureException(err);
-          resolve();
-        });
+      Sentry.withScope(scope => {
+        if (opts.level) {
+          // @ts-expect-error - allow any string.
+          scope.setLevel(opts.level);
+        }
+        if (opts.tags) {
+          scope.setTags(opts.tags);
+        }
+        if (opts.extra) {
+          scope.setExtras(opts.extra);
+        }
+        Sentry.captureException(err);
       });
     };
   } catch (e) {
