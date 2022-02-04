@@ -7,6 +7,8 @@
 
 /* eslint-env jest */
 
+const {createMockPage, mockRunnerModule} = require('./gather/mock-driver.js');
+
 const snapshotModule = {snapshot: jest.fn()};
 jest.mock('../../fraggle-rock/gather/snapshot-runner.js', () => snapshotModule);
 const navigationModule = {navigation: jest.fn()};
@@ -14,7 +16,8 @@ jest.mock('../../fraggle-rock/gather/navigation-runner.js', () => navigationModu
 const timespanModule = {startTimespan: jest.fn()};
 jest.mock('../../fraggle-rock/gather/timespan-runner.js', () => timespanModule);
 
-const {createMockPage} = require('./gather/mock-driver.js');
+const mockRunner = mockRunnerModule();
+
 const UserFlow = require('../../fraggle-rock/user-flow.js');
 
 describe('UserFlow', () => {
@@ -22,6 +25,8 @@ describe('UserFlow', () => {
 
   beforeEach(() => {
     mockPage = createMockPage();
+
+    mockRunner.reset();
 
     snapshotModule.snapshot.mockReset();
     snapshotModule.snapshot.mockResolvedValue({
@@ -195,6 +200,48 @@ describe('UserFlow', () => {
         {name: 'My Snapshot'},
         {name: 'Snapshot report (www.example.com/)'},
       ]);
+    });
+  });
+
+  describe('.getFlowResult', () => {
+    it('should throw if no flow steps have been run', async () => {
+      const flow = new UserFlow(mockPage.asPage());
+      const flowResultPromise = flow.getFlowResult();
+      await expect(flowResultPromise).rejects.toThrow(/Need at least one step/);
+    });
+
+    it('should get flow result', async () => {
+      mockRunner.audit.mockImplementation(artifacts => ({
+        lhr: {
+          finalUrl: artifacts.URL.finalUrl,
+          gatherMode: artifacts.GatherContext.gatherMode,
+        },
+      }));
+      const flow = new UserFlow(mockPage.asPage());
+
+      await flow.navigate('https://www.example.com/');
+      await flow.startTimespan({stepName: 'My Timespan'});
+      await flow.endTimespan();
+      await flow.snapshot({stepName: 'My Snapshot'});
+
+      const flowResult = await flow.getFlowResult();
+      expect(flowResult).toMatchObject({
+        steps: [
+          {
+            lhr: {finalUrl: 'https://www.example.com', gatherMode: 'navigation'},
+            name: 'Navigation report (www.example.com/)',
+          },
+          {
+            lhr: {finalUrl: 'https://www.example.com', gatherMode: 'timespan'},
+            name: 'My Timespan',
+          },
+          {
+            lhr: {finalUrl: 'https://www.example.com', gatherMode: 'snapshot'},
+            name: 'My Snapshot',
+          },
+        ],
+        name: 'User flow (www.example.com)',
+      });
     });
   });
 });
