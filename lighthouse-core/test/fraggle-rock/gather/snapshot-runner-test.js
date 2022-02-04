@@ -67,7 +67,6 @@ describe('Snapshot Runner', () => {
     await snapshot({page, config});
     expect(mockDriver.connect).toHaveBeenCalled();
     expect(mockRunner.gather).toHaveBeenCalled();
-    expect(mockRunner.audit).toHaveBeenCalled();
   });
 
   it('should collect base artifacts', async () => {

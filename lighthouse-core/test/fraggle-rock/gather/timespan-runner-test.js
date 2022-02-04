@@ -71,7 +71,6 @@ describe('Timespan Runner', () => {
     await timespan.endTimespan();
     expect(mockDriver.connect).toHaveBeenCalled();
     expect(mockRunner.gather).toHaveBeenCalled();
-    expect(mockRunner.audit).toHaveBeenCalled();
   });
 
   it('should prepare the target', async () => {
