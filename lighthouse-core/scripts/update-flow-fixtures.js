@@ -13,7 +13,7 @@ import waitForExpect from 'wait-for-expect';
 import puppeteer from 'puppeteer';
 
 import {LH_ROOT} from '../../root.js';
-import UserFlow from '../fraggle-rock/user-flow.js';
+import {startFlow} from '../fraggle-rock/api.js';
 
 
 /** @param {puppeteer.Page} page */
@@ -54,7 +54,7 @@ async function waitForImagesToLoad(page) {
 
   try {
     const page = await browser.newPage();
-    const flow = new UserFlow(page);
+    const flow = await startFlow(page);
 
     await flow.navigate('https://www.mikescerealshack.co');
 
@@ -70,9 +70,7 @@ async function waitForImagesToLoad(page) {
 
     await flow.navigate('https://www.mikescerealshack.co/corrections');
 
-    await flow.endFlow();
-
-    const flowResult = flow.getFlowResult();
+    const flowResult = await flow.getFlowResult();
 
     fs.writeFileSync(
       `${LH_ROOT}/lighthouse-core/test/fixtures/fraggle-rock/reports/sample-flow-result.json`,
@@ -80,7 +78,7 @@ async function waitForImagesToLoad(page) {
     );
 
     if (process.argv.includes('--view')) {
-      const htmlReport = flow.generateReport();
+      const htmlReport = await flow.generateReport();
       const filepath = `${LH_ROOT}/dist/sample-reports/flow-report/index.html`;
       fs.writeFileSync(filepath, htmlReport);
       open(filepath);

@@ -152,10 +152,10 @@ class UserFlow {
   /**
    * @returns {Promise<LH.FlowResult>}
    */
-  async endFlow() {
+  async getFlowResult() {
     if (this.flowResult) return this.flowResult;
     if (!this.stepArtifacts.length) {
-      throw Error('Need at least one step before ending the flow');
+      throw Error('Need at least one step before getting the result');
     }
     const url = new URL(this.stepArtifacts[0].gatherResult.artifacts.URL.finalUrl);
     const flowName = this.name || `User flow (${url.hostname})`;
@@ -173,20 +173,10 @@ class UserFlow {
   }
 
   /**
-   * @return {LH.FlowResult}
+   * @return {Promise<string>}
    */
-  getFlowResult() {
-    if (!this.flowResult) {
-      throw Error('Must end the flow before getting the result');
-    }
-    return this.flowResult;
-  }
-
-  /**
-   * @return {string}
-   */
-  generateReport() {
-    const flowResult = this.getFlowResult();
+  async generateReport() {
+    const flowResult = await this.getFlowResult();
     return generateFlowReportHtml(flowResult);
   }
 }
