@@ -132,7 +132,7 @@ function init(opts) {
             scope.setExtras(opts.extra);
           }
           Sentry.captureException(err);
-          resolve(); // TODO: idk ??
+          resolve();
         });
       });
     };
