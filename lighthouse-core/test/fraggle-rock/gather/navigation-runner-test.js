@@ -484,7 +484,6 @@ describe('NavigationRunner', () => {
     it('should throw on invalid URL', async () => {
       const runnerActual = jest.requireActual('../../../runner.js');
       mockRunner.gather.mockImplementation(runnerActual.gather);
-      mockRunner.audit.mockImplementation(runnerActual.audit);
 
       const navigatePromise = runner.navigation({
         url: '',
