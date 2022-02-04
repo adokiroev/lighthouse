@@ -22,16 +22,42 @@ describe('UserFlow', () => {
 
   beforeEach(() => {
     mockPage = createMockPage();
-    const lhr = {finalUrl: 'https://www.example.com'};
 
     snapshotModule.snapshot.mockReset();
-    snapshotModule.snapshot.mockResolvedValue({lhr: {...lhr, gatherMode: 'snapshot'}});
+    snapshotModule.snapshot.mockResolvedValue({
+      artifacts: {
+        URL: {finalUrl: 'https://www.example.com'},
+        GatherContext: {gatherMode: 'snapshot'},
+      },
+      runnerOptions: {
+        config: {},
+        computedCache: new Map(),
+      },
+    });
 
     navigationModule.navigation.mockReset();
-    navigationModule.navigation.mockResolvedValue({lhr: {...lhr, gatherMode: 'navigation'}});
+    navigationModule.navigation.mockResolvedValue({
+      artifacts: {
+        URL: {finalUrl: 'https://www.example.com'},
+        GatherContext: {gatherMode: 'navigation'},
+      },
+      runnerOptions: {
+        config: {},
+        computedCache: new Map(),
+      },
+    });
 
-    const timespanLhr = {...lhr, gatherMode: 'timespan'};
-    const timespan = {endTimespan: jest.fn().mockResolvedValue({lhr: timespanLhr})};
+    const timespanGatherResult = {
+      artifacts: {
+        URL: {finalUrl: 'https://www.example.com'},
+        GatherContext: {gatherMode: 'timespan'},
+      },
+      runnerOptions: {
+        config: {},
+        computedCache: new Map(),
+      },
+    };
+    const timespan = {endTimespan: jest.fn().mockResolvedValue(timespanGatherResult)};
     timespanModule.startTimespan.mockReset();
     timespanModule.startTimespan.mockResolvedValue(timespan);
   });
@@ -54,10 +80,10 @@ describe('UserFlow', () => {
       await flow.navigate('https://example.com/3');
 
       expect(navigationModule.navigation).toHaveBeenCalledTimes(3);
-      expect(flow.steps).toMatchObject([
-        {name: 'My Step', lhr: {finalUrl: 'https://www.example.com'}},
-        {name: 'Navigation report (www.example.com/)', lhr: {finalUrl: 'https://www.example.com'}},
-        {name: 'Navigation report (www.example.com/)', lhr: {finalUrl: 'https://www.example.com'}},
+      expect(flow.stepArtifacts).toMatchObject([
+        {name: 'My Step'},
+        {name: 'Navigation report (www.example.com/)'},
+        {name: 'Navigation report (www.example.com/)'},
       ]);
     });
 
@@ -137,9 +163,9 @@ describe('UserFlow', () => {
       await flow.endTimespan();
 
       expect(timespanModule.startTimespan).toHaveBeenCalledTimes(2);
-      expect(flow.steps).toMatchObject([
-        {name: 'My Timespan', lhr: {finalUrl: 'https://www.example.com'}},
-        {name: 'Timespan report (www.example.com/)', lhr: {finalUrl: 'https://www.example.com'}},
+      expect(flow.stepArtifacts).toMatchObject([
+        {name: 'My Timespan'},
+        {name: 'Timespan report (www.example.com/)'},
       ]);
     });
   });
@@ -165,9 +191,9 @@ describe('UserFlow', () => {
       await flow.snapshot();
 
       expect(snapshotModule.snapshot).toHaveBeenCalledTimes(2);
-      expect(flow.steps).toMatchObject([
-        {name: 'My Snapshot', lhr: {finalUrl: 'https://www.example.com'}},
-        {name: 'Snapshot report (www.example.com/)', lhr: {finalUrl: 'https://www.example.com'}},
+      expect(flow.stepArtifacts).toMatchObject([
+        {name: 'My Snapshot'},
+        {name: 'Snapshot report (www.example.com/)'},
       ]);
     });
   });
