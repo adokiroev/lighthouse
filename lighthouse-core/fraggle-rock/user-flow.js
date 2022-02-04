@@ -138,7 +138,6 @@ class UserFlow {
 
     const options = {...this.options, ...stepOptions};
     const gatherResult = await snapshot(options);
-    if (!gatherResult) throw Error('Snapshot returned undefined');
 
     const providedName = stepOptions?.stepName;
     this.stepArtifacts.push({
