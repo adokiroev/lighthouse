@@ -6,12 +6,12 @@
 'use strict';
 
 const {generateFlowReportHtml} = require('../../report/generator/report-generator.js');
-const {snapshot} = require('./gather/snapshot-runner.js');
-const {startTimespan} = require('./gather/timespan-runner.js');
-const {navigation} = require('./gather/navigation-runner.js');
+const {snapshotGather} = require('./gather/snapshot-runner.js');
+const {startTimespanGather} = require('./gather/timespan-runner.js');
+const {navigationGather} = require('./gather/navigation-runner.js');
 const Runner = require('../runner.js');
 
-/** @typedef {Parameters<snapshot>[0]} FrOptions */
+/** @typedef {Parameters<snapshotGather>[0]} FrOptions */
 /** @typedef {Omit<FrOptions, 'page'> & {name?: string}} UserFlowOptions */
 /** @typedef {Omit<FrOptions, 'page'> & {stepName?: string}} StepOptions */
 /** @typedef {{gatherResult: LH.Gatherer.FRGatherResult, name: string}} StepArtifact */
@@ -92,7 +92,7 @@ class UserFlow {
   async navigate(url, stepOptions) {
     if (this.currentTimespan) throw Error('Timespan already in progress');
 
-    const gatherResult = await navigation(this._getNextNavigationOptions(url, stepOptions));
+    const gatherResult = await navigationGather(this._getNextNavigationOptions(url, stepOptions));
 
     const providedName = stepOptions?.stepName;
     this.stepArtifacts.push({
@@ -110,7 +110,7 @@ class UserFlow {
     if (this.currentTimespan) throw Error('Timespan already in progress');
 
     const options = {...this.options, ...stepOptions};
-    const timespan = await startTimespan(options);
+    const timespan = await startTimespanGather(options);
     this.currentTimespan = {timespan, options};
   }
 
@@ -118,7 +118,7 @@ class UserFlow {
     if (!this.currentTimespan) throw Error('No timespan in progress');
 
     const {timespan, options} = this.currentTimespan;
-    const gatherResult = await timespan.endTimespan();
+    const gatherResult = await timespan.endTimespanGather();
     this.currentTimespan = undefined;
 
     const providedName = options?.stepName;
@@ -137,7 +137,7 @@ class UserFlow {
     if (this.currentTimespan) throw Error('Timespan already in progress');
 
     const options = {...this.options, ...stepOptions};
-    const gatherResult = await snapshot(options);
+    const gatherResult = await snapshotGather(options);
 
     const providedName = stepOptions?.stepName;
     this.stepArtifacts.push({

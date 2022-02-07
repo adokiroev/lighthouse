@@ -5,9 +5,9 @@
  */
 'use strict';
 
-const {snapshot: snapshot_} = require('./gather/snapshot-runner.js');
-const {startTimespan: startTimespan_} = require('./gather/timespan-runner.js');
-const {navigation: navigation_} = require('./gather/navigation-runner.js');
+const {snapshotGather} = require('./gather/snapshot-runner.js');
+const {startTimespanGather} = require('./gather/timespan-runner.js');
+const {navigationGather} = require('./gather/navigation-runner.js');
 const Runner = require('../runner.js');
 const UserFlow = require('./user-flow.js');
 
@@ -20,31 +20,31 @@ async function startFlow(page, options) {
 }
 
 /**
- * @param  {Parameters<navigation_>} params
+ * @param  {Parameters<navigationGather>} params
  * @return {Promise<LH.RunnerResult|undefined>}
  */
 async function navigation(...params) {
-  const gatherResult = await navigation_(...params);
+  const gatherResult = await navigationGather(...params);
   return Runner.audit(gatherResult.artifacts, gatherResult.runnerOptions);
 }
 
 /**
- * @param  {Parameters<snapshot_>} params
+ * @param  {Parameters<snapshotGather>} params
  * @return {Promise<LH.RunnerResult|undefined>}
  */
 async function snapshot(...params) {
-  const gatherResult = await snapshot_(...params);
+  const gatherResult = await snapshotGather(...params);
   return Runner.audit(gatherResult.artifacts, gatherResult.runnerOptions);
 }
 
 /**
- * @param  {Parameters<startTimespan_>} params
+ * @param  {Parameters<startTimespanGather>} params
  * @return {Promise<{endTimespan: () => Promise<LH.RunnerResult|undefined>}>}
  */
 async function startTimespan(...params) {
-  const {endTimespan: endTimespan_} = await startTimespan_(...params);
+  const {endTimespanGather} = await startTimespanGather(...params);
   const endTimespan = async () => {
-    const gatherResult = await endTimespan_();
+    const gatherResult = await endTimespanGather();
     return Runner.audit(gatherResult.artifacts, gatherResult.runnerOptions);
   };
   return {endTimespan};

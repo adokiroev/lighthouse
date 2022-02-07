@@ -18,9 +18,9 @@ const {getBaseArtifacts, finalizeArtifacts} = require('./base-artifacts.js');
 
 /**
  * @param {{page: import('puppeteer').Page, config?: LH.Config.Json, configContext?: LH.Config.FRContext}} options
- * @return {Promise<{endTimespan(): Promise<LH.Gatherer.FRGatherResult>}>}
+ * @return {Promise<{endTimespanGather(): Promise<LH.Gatherer.FRGatherResult>}>}
  */
-async function startTimespan(options) {
+async function startTimespanGather(options) {
   const {configContext = {}} = options;
   const {config} = initializeConfig(options.config, {...configContext, gatherMode: 'timespan'});
   const driver = new Driver(options.page);
@@ -48,7 +48,7 @@ async function startTimespan(options) {
   await collectPhaseArtifacts({phase: 'startSensitiveInstrumentation', ...phaseOptions});
 
   return {
-    async endTimespan() {
+    async endTimespanGather() {
       const finalUrl = await options.page.url();
       const runnerOptions = {config, computedCache};
       const artifacts = await Runner.gather(
@@ -72,5 +72,5 @@ async function startTimespan(options) {
 }
 
 module.exports = {
-  startTimespan,
+  startTimespanGather,
 };

@@ -485,7 +485,7 @@ describe('NavigationRunner', () => {
       const runnerActual = jest.requireActual('../../../runner.js');
       mockRunner.gather.mockImplementation(runnerActual.gather);
 
-      const navigatePromise = runner.navigation({
+      const navigatePromise = runner.navigationGather({
         url: '',
         page: mockDriver._page.asPage(),
       });
@@ -501,7 +501,7 @@ describe('NavigationRunner', () => {
       };
 
       const configContext = {settingsOverrides};
-      await runner.navigation({
+      await runner.navigationGather({
         url: 'http://example.com',
         page: mockDriver._page.asPage(),
         configContext,

@@ -19,7 +19,7 @@ const {getBaseArtifacts, finalizeArtifacts} = require('./base-artifacts.js');
  * @param {{page: import('puppeteer').Page, config?: LH.Config.Json, configContext?: LH.Config.FRContext}} options
  * @return {Promise<LH.Gatherer.FRGatherResult>}
  */
-async function snapshot(options) {
+async function snapshotGather(options) {
   const {configContext = {}} = options;
   const {config} = initializeConfig(options.config, {...configContext, gatherMode: 'snapshot'});
   const driver = new Driver(options.page);
@@ -60,5 +60,5 @@ async function snapshot(options) {
 }
 
 module.exports = {
-  snapshot,
+  snapshotGather,
 };

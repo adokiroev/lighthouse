@@ -279,7 +279,7 @@ async function _cleanup({requestedUrl, driver, config}) {
  * @param {{url: string, page: import('puppeteer').Page, config?: LH.Config.Json, configContext?: LH.Config.FRContext}} options
  * @return {Promise<LH.Gatherer.FRGatherResult>}
  */
-async function navigation(options) {
+async function navigationGather(options) {
   const {url, page, configContext = {}} = options;
   const {config} = initializeConfig(options.config, {...configContext, gatherMode: 'navigation'});
   const computedCache = new Map();
@@ -305,7 +305,7 @@ async function navigation(options) {
 }
 
 module.exports = {
-  navigation,
+  navigationGather,
   _setup,
   _setupNavigation,
   _navigate,
