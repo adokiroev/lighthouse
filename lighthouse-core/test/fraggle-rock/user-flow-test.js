@@ -9,11 +9,11 @@
 
 const {createMockPage, mockRunnerModule} = require('./gather/mock-driver.js');
 
-const snapshotModule = {snapshot: jest.fn()};
+const snapshotModule = {snapshotGather: jest.fn()};
 jest.mock('../../fraggle-rock/gather/snapshot-runner.js', () => snapshotModule);
-const navigationModule = {navigation: jest.fn()};
+const navigationModule = {navigationGather: jest.fn()};
 jest.mock('../../fraggle-rock/gather/navigation-runner.js', () => navigationModule);
-const timespanModule = {startTimespan: jest.fn()};
+const timespanModule = {startTimespanGather: jest.fn()};
 jest.mock('../../fraggle-rock/gather/timespan-runner.js', () => timespanModule);
 
 const mockRunner = mockRunnerModule();
@@ -28,8 +28,8 @@ describe('UserFlow', () => {
 
     mockRunner.reset();
 
-    snapshotModule.snapshot.mockReset();
-    snapshotModule.snapshot.mockResolvedValue({
+    snapshotModule.snapshotGather.mockReset();
+    snapshotModule.snapshotGather.mockResolvedValue({
       artifacts: {
         URL: {finalUrl: 'https://www.example.com'},
         GatherContext: {gatherMode: 'snapshot'},
@@ -40,8 +40,8 @@ describe('UserFlow', () => {
       },
     });
 
-    navigationModule.navigation.mockReset();
-    navigationModule.navigation.mockResolvedValue({
+    navigationModule.navigationGather.mockReset();
+    navigationModule.navigationGather.mockResolvedValue({
       artifacts: {
         URL: {finalUrl: 'https://www.example.com'},
         GatherContext: {gatherMode: 'navigation'},
@@ -62,9 +62,9 @@ describe('UserFlow', () => {
         computedCache: new Map(),
       },
     };
-    const timespan = {endTimespan: jest.fn().mockResolvedValue(timespanGatherResult)};
-    timespanModule.startTimespan.mockReset();
-    timespanModule.startTimespan.mockResolvedValue(timespan);
+    const timespan = {endTimespanGather: jest.fn().mockResolvedValue(timespanGatherResult)};
+    timespanModule.startTimespanGather.mockReset();
+    timespanModule.startTimespanGather.mockResolvedValue(timespan);
   });
 
   describe('.navigate()', () => {
@@ -84,7 +84,7 @@ describe('UserFlow', () => {
 
       await flow.navigate('https://example.com/3');
 
-      expect(navigationModule.navigation).toHaveBeenCalledTimes(3);
+      expect(navigationModule.navigationGather).toHaveBeenCalledTimes(3);
       expect(flow.stepArtifacts).toMatchObject([
         {name: 'My Step'},
         {name: 'Navigation report (www.example.com/)'},
@@ -108,8 +108,8 @@ describe('UserFlow', () => {
       await flow.navigate('https://example.com/4', {configContext: configContextExplicit});
 
       // Check that we have the property set.
-      expect(navigationModule.navigation).toHaveBeenCalledTimes(4);
-      const [[call1], [call2], [call3], [call4]] = navigationModule.navigation.mock.calls;
+      expect(navigationModule.navigationGather).toHaveBeenCalledTimes(4);
+      const [[call1], [call2], [call3], [call4]] = navigationModule.navigationGather.mock.calls;
       expect(call1).not.toHaveProperty('configContext.settingsOverrides.disableStorageReset');
       expect(call2).toHaveProperty('configContext.settingsOverrides.disableStorageReset');
       expect(call3).toHaveProperty('configContext.settingsOverrides.disableStorageReset');
@@ -136,8 +136,8 @@ describe('UserFlow', () => {
       await flow.navigate('https://example.com/3', {configContext: configContextExplicit});
 
       // Check that we have the property set.
-      expect(navigationModule.navigation).toHaveBeenCalledTimes(3);
-      const [[call1], [call2], [call3]] = navigationModule.navigation.mock.calls;
+      expect(navigationModule.navigationGather).toHaveBeenCalledTimes(3);
+      const [[call1], [call2], [call3]] = navigationModule.navigationGather.mock.calls;
       expect(call1).toHaveProperty('configContext.skipAboutBlank');
       expect(call2).toHaveProperty('configContext.skipAboutBlank');
       expect(call3).toHaveProperty('configContext.skipAboutBlank');
@@ -167,7 +167,7 @@ describe('UserFlow', () => {
       await flow.startTimespan();
       await flow.endTimespan();
 
-      expect(timespanModule.startTimespan).toHaveBeenCalledTimes(2);
+      expect(timespanModule.startTimespanGather).toHaveBeenCalledTimes(2);
       expect(flow.stepArtifacts).toMatchObject([
         {name: 'My Timespan'},
         {name: 'Timespan report (www.example.com/)'},
@@ -195,7 +195,7 @@ describe('UserFlow', () => {
       await flow.snapshot({stepName: 'My Snapshot'});
       await flow.snapshot();
 
-      expect(snapshotModule.snapshot).toHaveBeenCalledTimes(2);
+      expect(snapshotModule.snapshotGather).toHaveBeenCalledTimes(2);
       expect(flow.stepArtifacts).toMatchObject([
         {name: 'My Snapshot'},
         {name: 'Snapshot report (www.example.com/)'},
