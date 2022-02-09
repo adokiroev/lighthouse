@@ -34,6 +34,7 @@ export const Report: FunctionComponent<{hashState: LH.FlowResult.HashState}> =
   const ref = useExternalRenderer<HTMLDivElement>(() => {
     return renderReport(hashState.currentLhr, {
       disableFireworks: true,
+      disableDarkMode: true,
       omitTopbar: true,
       omitGlobalStyles: true,
       onPageAnchorRendered: link => convertAnchor(link, hashState.index),
