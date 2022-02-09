@@ -14,9 +14,7 @@
 /* global ga */
 
 import {renderReport} from '../renderer/api.js';
-import {toggleDarkTheme} from '../renderer/features-util.js';
 import {Logger} from '../renderer/logger.js';
-import {DOM} from './bundle.js';
 
 function __initLighthouseReport__() {
   /** @type {LH.Result} */
@@ -28,12 +26,6 @@ function __initLighthouseReport__() {
       return document.documentElement.outerHTML;
     },
   });
-
-  // Fireworks look better in dark mode.
-  if (reportRootEl.querySelector('.lh-score100')) {
-    toggleDarkTheme(new DOM(document, reportRootEl), true);
-  }
-
   document.body.append(reportRootEl);
 
   document.addEventListener('lh-analytics', /** @param {Event} e */ e => {
