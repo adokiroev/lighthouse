@@ -11,9 +11,12 @@ declare module Renderer {
 
   interface Options {
     /**
-     * Don't automatically apply dark-mode to dark based on (prefers-color-scheme: dark). (DevTools and PSI don't want this.)
-     * Also, the fireworks easter-egg will want to flip to dark, so this setting will also disable chance of fireworks. */
-    disableAutoDarkModeAndFireworks?: boolean;
+     * Disables automatically applying dark mode based on `prefers-color-scheme: dark`. Dark mode can still
+     * be manually applied by assigning the class `lh-dark` to the report element.
+     */
+    disableDarkMode?: boolean;
+    /** Disables the fireworks animation that plays when all core categories have a 100 score. */
+    disableFireworks?: boolean;
 
     /** Disable the topbar UI component */
     omitTopbar?: boolean;

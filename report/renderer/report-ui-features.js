@@ -70,12 +70,12 @@ export class ReportUIFeatures {
     this._setupThirdPartyFilter();
     this._setupElementScreenshotOverlay(this._dom.rootEl);
 
-    let turnOffTheLights = false;
     // Do not query the system preferences for DevTools - DevTools should only apply dark theme
     // if dark is selected in the settings panel.
-    const disableDarkMode = this._dom.isDevTools() || this._opts.disableAutoDarkModeAndFireworks;
+    // TODO: set `disableDarkMode` in devtools and delete this special case.
+    const disableDarkMode = this._dom.isDevTools() || this._opts.disableDarkMode;
     if (!disableDarkMode && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      turnOffTheLights = true;
+      toggleDarkTheme(this._dom, true);
     }
 
     // Fireworks!
@@ -85,13 +85,8 @@ export class ReportUIFeatures {
       const cat = lhr.categories[id];
       return cat && cat.score === 1;
     });
-    if (scoresAll100 && !this._opts.disableAutoDarkModeAndFireworks) {
-      turnOffTheLights = true;
+    if (scoresAll100 && !this._opts.disableFireworks) {
       this._enableFireworks();
-    }
-
-    if (turnOffTheLights) {
-      toggleDarkTheme(this._dom, true);
     }
 
     // Show the metric descriptions by default when there is an error.
