@@ -17,6 +17,11 @@ declare module Renderer {
     disableDarkMode?: boolean;
     /** Disables the fireworks animation that plays when all core categories have a 100 score. */
     disableFireworks?: boolean;
+    /**
+     * Disable dark mode and fireworks.
+     * @deprecated Use `disableDarkMode` and `disableFireworks` instead.
+     */
+    disableAutoDarkModeAndFireworks?: boolean;
 
     /** Disable the topbar UI component */
     omitTopbar?: boolean;

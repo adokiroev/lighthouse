@@ -73,7 +73,8 @@ export class ReportUIFeatures {
     // Do not query the system preferences for DevTools - DevTools should only apply dark theme
     // if dark is selected in the settings panel.
     // TODO: set `disableDarkMode` in devtools and delete this special case.
-    const disableDarkMode = this._dom.isDevTools() || this._opts.disableDarkMode;
+    const disableDarkMode = this._dom.isDevTools() || this._opts.disableDarkMode ||
+      this._opts.disableAutoDarkModeAndFireworks;
     if (!disableDarkMode && window.matchMedia('(prefers-color-scheme: dark)').matches) {
       toggleDarkTheme(this._dom, true);
     }
@@ -85,7 +86,8 @@ export class ReportUIFeatures {
       const cat = lhr.categories[id];
       return cat && cat.score === 1;
     });
-    if (scoresAll100 && !this._opts.disableFireworks) {
+    if (scoresAll100 &&
+      !(this._opts.disableFireworks || this._opts.disableAutoDarkModeAndFireworks)) {
       this._enableFireworks();
     }
 
