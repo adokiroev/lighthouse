@@ -8,6 +8,7 @@
 /* global globalThis */
 
 const lighthouse = require('../lighthouse-core/index.js');
+const {navigation, startTimespan, snapshot} = require('../lighthouse-core/fraggle-rock/api.js');
 const RawProtocol = require('../lighthouse-core/gather/connections/raw.js');
 const log = require('lighthouse-logger');
 const {lookupLocale} = require('../lighthouse-core/lib/i18n/i18n.js');
@@ -27,7 +28,7 @@ globalThis.Buffer = require('buffer').Buffer;
  * If `lighthouse-plugin-publisher-ads` is in the list of
  * `categoryIDs` the plugin will also be run.
  * Counterpart to the CDT code that sets flags.
- * @see https://cs.chromium.org/chromium/src/third_party/devtools-frontend/src/front_end/lighthouse/LighthouseController.js?type=cs&q=%22const+RuntimeSettings%22+f:lighthouse+-f:out&g=0&l=250
+ * @see https://source.chromium.org/chromium/chromium/src/+/main:third_party/devtools-frontend/src/front_end/panels/lighthouse/LighthouseController.ts;l=280
  * @param {Array<string>} categoryIDs
  * @param {string} device
  * @return {LH.Config.Json}
@@ -87,6 +88,12 @@ if (typeof self !== 'undefined') {
   self.setUpWorkerConnection = setUpWorkerConnection;
   // @ts-expect-error
   self.runLighthouse = lighthouse;
+  // @ts-expect-error
+  self.runLighthouseNavigation = navigation;
+  // @ts-expect-error
+  self.startLighthouseTimespan = startTimespan;
+  // @ts-expect-error
+  self.runLighthouseSnapshot = snapshot;
   // @ts-expect-error
   self.createConfig = createConfig;
   // @ts-expect-error
