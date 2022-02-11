@@ -112,6 +112,15 @@ export class ReportUIFeatures {
       });
     }
 
+    if (this._opts.onViewTrace) {
+      this.addButton({
+        text: lhr.configSettings.throttlingMethod === 'simulate' ?
+          Util.i18n.strings.viewOriginalTraceLabel :
+          Util.i18n.strings.viewTraceLabel,
+        onClick: () => this._opts.onViewTrace?.(),
+      });
+    }
+
     if (this._opts.getStandaloneReportHTML) {
       this._dom.find('a[data-action="save-html"]', this._dom.rootEl).classList.remove('lh-hidden');
     }
@@ -180,9 +189,6 @@ export class ReportUIFeatures {
   _enableFireworks() {
     const scoresContainer = this._dom.find('.lh-scores-container', this._dom.rootEl);
     scoresContainer.classList.add('lh-score100');
-    scoresContainer.addEventListener('click', _ => {
-      scoresContainer.classList.toggle('lh-fireworks-paused');
-    });
   }
 
   _setupMediaQueryListeners() {

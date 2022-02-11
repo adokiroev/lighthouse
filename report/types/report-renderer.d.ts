@@ -5,6 +5,7 @@
  */
 
 import { Result as AuditResult } from "../../types/lhr/audit-result";
+import { ReportUIFeatures } from "../renderer/report-ui-features.js";
 
 declare module Renderer {
   function renderReport(lhr: AuditResult, options?: Options): HTMLElement;
@@ -30,6 +31,12 @@ declare module Renderer {
     onPrintOverride?: (rootEl: HTMLElement) => Promise<void>;
     /** If defined, renderer will call this instead of using a `<a download>.click()>` to trigger a JSON/HTML download. Blob will be either json or html. */
     onSaveFileOverride?: (blob: Blob, suggestedFilename: string) => Promise<void>;
+    /**
+     * If defined, adds a `View Trace` button to the report, and calls this callback when clicked.
+     * The callback should do something to present the user with a visualization of the trace
+     * data, which can be gotten from the artifacts.
+     */
+    onViewTrace?: () => void;
   }
 }
 
